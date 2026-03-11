@@ -1,0 +1,10 @@
+# IDE
+.idea/
+
+# Python
+*.pyc
+__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
