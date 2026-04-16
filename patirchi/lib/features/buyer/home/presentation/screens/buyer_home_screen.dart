@@ -6,8 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:patirchi/core/theme/app_colors.dart';
 import 'package:patirchi/core/utils/formatters.dart';
 import '../../data/datasources/buyer_home_local_datasource.dart';
+import '../../data/models/product_model.dart';
 import '../providers/buyer_home_provider.dart';
 import 'nearby_shops_map_screen.dart';
+import 'product_detail_screen.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   const BuyerHomeScreen({super.key});
@@ -18,6 +20,7 @@ class BuyerHomeScreen extends StatefulWidget {
 
 class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   late final PageController _bannerController;
+  late final ScrollController _scrollController;
   Timer? _bannerTimer;
   int _currentBannerPage = 0;
   final int _bannerCount = 2;
@@ -26,6 +29,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   void initState() {
     super.initState();
     _bannerController = PageController();
+    _scrollController = ScrollController()..addListener(_onScroll);
     _startBannerAutoSlide();
   }
 
@@ -33,6 +37,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   void dispose() {
     _bannerTimer?.cancel();
     _bannerController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -48,6 +53,14 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     });
   }
 
+  /// Pagination: load more when near bottom
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      context.read<BuyerHomeProvider>().loadMore();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusBarHeight = MediaQuery.of(context).padding.top;
@@ -58,181 +71,204 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
           value: SystemUiOverlayStyle.light,
           child: Container(
             color: const Color(0xFF1A1A1A),
-            child: CustomScrollView(
-              slivers: [
-                // ===== CUSTOM HEADER: Location → Search (PINNED) → Banner =====
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _BuyerHomeSliverDelegate(
-                    statusBarHeight: statusBarHeight,
-                    searchBar: _buildSearchBar(provider),
-                    middleRow: _buildMiddleRow(),
-                    promoBanner: _buildPromoBanner(),
-                  ),
-                ),
-
-                // ===== AD BANNER CAROUSEL =====
-                SliverToBoxAdapter(
-                  child: Container(
-                    color: const Color(0xFF1A1A1A),
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: 140,
-                          child: PageView(
-                            controller: _bannerController,
-                            onPageChanged: (index) {
-                              setState(() => _currentBannerPage = index);
-                            },
-                            children: [
-                              _buildAdBanner1(),
-                              _buildAdBanner2(),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        // Dot indicator
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(_bannerCount, (i) {
-                            final isActive = i == _currentBannerPage;
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 250),
-                              width: isActive ? 20 : 8,
-                              height: 8,
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              decoration: BoxDecoration(
-                                color: isActive
-                                    ? AppColors.primary
-                                    : const Color(0xFF555555),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            );
-                          }),
-                        ),
-                      ],
+            child: RefreshIndicator(
+              onRefresh: provider.refresh,
+              color: AppColors.primary,
+              backgroundColor: const Color(0xFF2C2C2C),
+              displacement: 80,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  // ===== CUSTOM HEADER =====
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _BuyerHomeSliverDelegate(
+                      statusBarHeight: statusBarHeight,
+                      searchBar: _buildSearchBar(provider),
+                      middleRow: _buildMiddleRow(),
+                      promoBanner: _buildPromoBanner(),
                     ),
                   ),
-                ),
 
-                // ===== QUICK SERVICES =====
-                SliverToBoxAdapter(
-                  child: Container(
-                    color: const Color(0xFF1A1A1A),
-                    padding: const EdgeInsets.only(top: 16),
-                    child: SizedBox(
-                      height: 110,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: BuyerHomeLocalDatasource.quickServices.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          final service = BuyerHomeLocalDatasource.quickServices[index];
-                          final iconData = _getServiceIcon(service['icon'] as String);
-                          final bgColors = [
-                            const Color(0xFF2979FF),
-                            const Color(0xFF43A047),
-                            const Color(0xFFE53935),
-                            const Color(0xFFFF8F00),
-                            const Color(0xFF7B1FA2),
-                          ];
-                          return SizedBox(
-                            width: 76,
-                            child: Column(
+                  // ===== AD BANNER CAROUSEL =====
+                  SliverToBoxAdapter(
+                    child: Container(
+                      color: const Color(0xFF1A1A1A),
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            height: 140,
+                            child: PageView(
+                              controller: _bannerController,
+                              onPageChanged: (index) {
+                                setState(() => _currentBannerPage = index);
+                              },
                               children: [
-                                Container(
-                                  width: 64,
-                                  height: 64,
-                                  decoration: BoxDecoration(
-                                    color: bgColors[index % bgColors.length],
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Icon(
-                                    iconData,
-                                    color: Colors.white,
-                                    size: 30,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  (service['label'] as String).replaceAll('\n', ' '),
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFFCCCCCC),
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                _buildAdBanner1(),
+                                _buildAdBanner2(),
                               ],
                             ),
-                          );
-                        },
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(_bannerCount, (i) {
+                              final isActive = i == _currentBannerPage;
+                              return AnimatedContainer(
+                                duration: const Duration(milliseconds: 250),
+                                width: isActive ? 20 : 8,
+                                height: 8,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 3),
+                                decoration: BoxDecoration(
+                                  color: isActive
+                                      ? AppColors.primary
+                                      : const Color(0xFF555555),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              );
+                            }),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ),
 
-                // ===== PRODUCT GRID =====
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 0),
-                  sliver: SliverGrid(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final product = provider.products[index];
-                        return _ProductCardDark(
-                          name: product.name,
-                          price: product.price,
-                          oldPrice: product.oldPrice,
-                          discountPercent: product.discountPercent,
-                          shopName: product.shopName,
-                          isFavorite: product.isFavorite,
-                          onTap: () {},
-                          onFavoriteTap: () => provider.toggleFavorite(product.id),
-                        );
-                      },
-                      childCount: provider.products.length,
-                    ),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 0.56,
+                  // ===== QUICK SERVICES =====
+                  SliverToBoxAdapter(
+                    child: Container(
+                      color: const Color(0xFF1A1A1A),
+                      padding: const EdgeInsets.only(top: 16),
+                      child: SizedBox(
+                        height: 110,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount:
+                              BuyerHomeLocalDatasource.quickServices.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 12),
+                          itemBuilder: (context, index) {
+                            final service =
+                                BuyerHomeLocalDatasource.quickServices[index];
+                            final iconData =
+                                _getServiceIcon(service['icon'] as String);
+                            final bgColors = [
+                              const Color(0xFF2979FF),
+                              const Color(0xFF43A047),
+                              const Color(0xFFE53935),
+                              const Color(0xFFFF8F00),
+                              const Color(0xFF7B1FA2),
+                            ];
+                            return SizedBox(
+                              width: 76,
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: 64,
+                                    height: 64,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          bgColors[index % bgColors.length],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Icon(
+                                      iconData,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    (service['label'] as String)
+                                        .replaceAll('\n', ' '),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFFCCCCCC),
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
-                ),
 
-                // Page indicator dots
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(7, (i) {
-                        return Container(
-                          width: i == 0 ? 8 : 6,
-                          height: i == 0 ? 8 : 6,
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i == 0
-                                ? const Color(0xFF2979FF)
-                                : const Color(0xFF555555),
-                          ),
-                        );
-                      }),
+                  // ===== PRODUCT GRID =====
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(10, 12, 10, 0),
+                    sliver: SliverGrid(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final product = provider.products[index];
+                          return _ProductCardDark(
+                            product: product,
+                            onTap: () => _openProductDetail(product),
+                            onFavoriteTap: () =>
+                                provider.toggleFavorite(product.id),
+                          );
+                        },
+                        childCount: provider.products.length,
+                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 0.56,
+                      ),
                     ),
                   ),
-                ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 10)),
-              ],
+                  // ===== LOADING / END INDICATOR =====
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: provider.isLoadingMore
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: AppColors.primary,
+                                ),
+                              )
+                            : provider.hasMore
+                                ? const SizedBox.shrink()
+                                : const Text(
+                                    'Barcha mahsulotlar yuklandi',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF666666),
+                                    ),
+                                  ),
+                      ),
+                    ),
+                  ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+
+  void _openProductDetail(ProductModel product) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductDetailScreen(product: product),
+      ),
     );
   }
 
@@ -269,7 +305,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
           ),
           const Icon(Icons.graphic_eq, color: Color(0xFF9E9E9E), size: 22),
           const SizedBox(width: 8),
-          Container(width: 1, height: 22, color: const Color(0xFF555555)),
+          Container(
+              width: 1, height: 22, color: const Color(0xFF555555)),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () {
@@ -279,7 +316,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                 ),
               );
             },
-            child: const Icon(Icons.map_outlined, color: Color(0xFF9E9E9E), size: 22),
+            child: const Icon(Icons.map_outlined,
+                color: Color(0xFF9E9E9E), size: 22),
           ),
           const SizedBox(width: 12),
         ],
@@ -287,19 +325,19 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     );
   }
 
-  // ===== MIDDLE ROW: Location text + Coin + Notify (one line, fades on scroll) =====
+  // ===== MIDDLE ROW =====
   Widget _buildMiddleRow() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Row(
         children: [
-          // Lokatsiya text
           Expanded(
             child: GestureDetector(
               onTap: () {},
               child: const Row(
                 children: [
-                  Icon(Icons.location_on_outlined, size: 18, color: Colors.white70),
+                  Icon(Icons.location_on_outlined,
+                      size: 18, color: Colors.white70),
                   SizedBox(width: 4),
                   Flexible(
                     child: Text(
@@ -313,17 +351,18 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                       ),
                     ),
                   ),
-                  Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.white70),
+                  Icon(Icons.keyboard_arrow_down,
+                      size: 20, color: Colors.white70),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 10),
-          // Coin / Balance
           GestureDetector(
             onTap: () {},
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
@@ -358,7 +397,6 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          // Notification bell with badge
           GestureDetector(
             onTap: () {},
             child: Stack(
@@ -407,7 +445,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     );
   }
 
-  // ===== PROMO BANNER (collapses with scroll) =====
+  // ===== PROMO BANNER =====
   Widget _buildPromoBanner() {
     return Container(
       width: double.infinity,
@@ -440,7 +478,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(18),
@@ -457,14 +496,14 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                         ),
                       ),
                       SizedBox(width: 2),
-                      Icon(Icons.chevron_right, color: Colors.white, size: 16),
+                      Icon(Icons.chevron_right,
+                          color: Colors.white, size: 16),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          // Decorative elements (right side)
           Positioned(
             right: 10,
             top: 12,
@@ -473,7 +512,11 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
               width: 90,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFD0D0D0), Color(0xFFA8A8A8), Color(0xFFE0E0E0)],
+                  colors: [
+                    Color(0xFFD0D0D0),
+                    Color(0xFFA8A8A8),
+                    Color(0xFFE0E0E0)
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -503,7 +546,6 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     );
   }
 
-  // ===== AD BANNER 1 (Garnier style) =====
   Widget _buildAdBanner1() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -523,40 +565,32 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'GARNIER',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white70,
-                    letterSpacing: 1.5,
-                  ),
-                ),
+                const Text('GARNIER',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white70,
+                        letterSpacing: 1.5)),
                 const SizedBox(height: 6),
-                const Text(
-                  'PRAZDNUY\nSVOYU KRASOTU',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    height: 1.2,
-                  ),
-                ),
+                const Text('PRAZDNUY\nSVOYU KRASOTU',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        height: 1.2)),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
                     color: const Color(0xFF8BC34A),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'BOSHLASH',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
+                  child: const Text('BOSHLASH',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white)),
                 ),
               ],
             ),
@@ -565,32 +599,28 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
             right: 12,
             top: 8,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text(
-                'Reklama',
-                style: TextStyle(fontSize: 10, color: Colors.white70),
-              ),
+              child: const Text('Reklama',
+                  style: TextStyle(fontSize: 10, color: Colors.white70)),
             ),
           ),
           Positioned(
             right: 16,
             bottom: 16,
-            child: Icon(
-              Icons.spa,
-              size: 60,
-              color: Colors.white.withValues(alpha: 0.15),
-            ),
+            child: Icon(Icons.spa,
+                size: 60,
+                color: Colors.white.withValues(alpha: 0.15)),
           ),
         ],
       ),
     );
   }
 
-  // ===== AD BANNER 2 (Tandir noni style) =====
   Widget _buildAdBanner2() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -610,31 +640,23 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Eng mazali nonlar',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF3C2415),
-                  ),
-                ),
+                const Text('Eng mazali nonlar',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF3C2415))),
                 const SizedBox(height: 4),
-                const Text(
-                  'TANDIR NONI 3=2',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF5C3A1E),
-                  ),
-                ),
+                const Text('TANDIR NONI 3=2',
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF5C3A1E))),
                 const SizedBox(height: 2),
-                Text(
-                  'Maxsus taklif',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: const Color(0xFF3C2415).withValues(alpha: 0.7),
-                  ),
-                ),
+                Text('Maxsus taklif',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: const Color(0xFF3C2415)
+                            .withValues(alpha: 0.7))),
               ],
             ),
           ),
@@ -642,25 +664,23 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
             top: 8,
             right: 10,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text(
-                'Reklama',
-                style: TextStyle(fontSize: 10, color: Color(0xFF888888)),
-              ),
+              child: const Text('Reklama',
+                  style:
+                      TextStyle(fontSize: 10, color: Color(0xFF888888))),
             ),
           ),
           Positioned(
             right: 16,
             bottom: 16,
-            child: Icon(
-              Icons.bakery_dining,
-              size: 50,
-              color: const Color(0xFF5C3A1E).withValues(alpha: 0.3),
-            ),
+            child: Icon(Icons.bakery_dining,
+                size: 50,
+                color: const Color(0xFF5C3A1E).withValues(alpha: 0.3)),
           ),
         ],
       ),
@@ -685,24 +705,17 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   }
 }
 
-// Dark-themed product card
+// ════════════════════════════════════════════════════════════════════
+//  PRODUCT CARD (dark theme, with network image)
+// ════════════════════════════════════════════════════════════════════
+
 class _ProductCardDark extends StatelessWidget {
-  final String name;
-  final int price;
-  final int? oldPrice;
-  final int? discountPercent;
-  final String? shopName;
-  final bool isFavorite;
+  final ProductModel product;
   final VoidCallback? onTap;
   final VoidCallback? onFavoriteTap;
 
   const _ProductCardDark({
-    required this.name,
-    required this.price,
-    this.oldPrice,
-    this.discountPercent,
-    this.shopName,
-    this.isFavorite = false,
+    required this.product,
     this.onTap,
     this.onFavoriteTap,
   });
@@ -722,41 +735,74 @@ class _ProductCardDark extends StatelessWidget {
             Expanded(
               child: Stack(
                 children: [
-                  Container(
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF3A3A3A),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.bakery_dining, size: 60, color: Color(0xFF666666)),
+                  // Product image
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(14)),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Hero(
+                        tag: 'product_${product.id}',
+                        child: product.imageUrl != null
+                            ? Image.network(
+                                product.imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _imagePlaceholder(),
+                                loadingBuilder:
+                                    (_, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return _imagePlaceholder();
+                                },
+                              )
+                            : _imagePlaceholder(),
+                      ),
                     ),
                   ),
+                  // Discount badge
+                  if (product.discountPercent != null)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF5252),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '-${product.discountPercent}%',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Favorite button
                   if (onFavoriteTap != null)
                     Positioned(
-                      top: 10,
-                      right: 10,
+                      top: 8,
+                      right: 8,
                       child: GestureDetector(
                         onTap: onFavoriteTap,
                         child: Container(
-                          width: 36,
-                          height: 36,
+                          width: 32,
+                          height: 32,
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.9),
+                            color: Colors.black.withValues(alpha: 0.4),
                             shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                blurRadius: 4,
-                              ),
-                            ],
                           ),
                           child: Icon(
-                            isFavorite ? Icons.favorite : Icons.favorite_border,
-                            size: 20,
-                            color: isFavorite
-                                ? const Color(0xFF2979FF)
-                                : const Color(0xFFAAAAAA),
+                            product.isFavorite
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            size: 18,
+                            color: product.isFavorite
+                                ? const Color(0xFFFF5252)
+                                : Colors.white70,
                           ),
                         ),
                       ),
@@ -770,7 +816,7 @@ class _ProductCardDark extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    name,
+                    product.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -782,47 +828,33 @@ class _ProductCardDark extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    Formatters.price(price),
+                    Formatters.price(product.price),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
                     ),
                   ),
-                  if (oldPrice != null) ...[
+                  if (product.oldPrice != null) ...[
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(
-                          Formatters.price(oldPrice!),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF888888),
-                            decoration: TextDecoration.lineThrough,
-                            decorationColor: Color(0xFF888888),
-                          ),
-                        ),
-                        if (discountPercent != null) ...[
-                          const SizedBox(width: 6),
-                          Text(
-                            '-$discountPercent%',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFFFF5252),
-                            ),
-                          ),
-                        ],
-                      ],
+                    Text(
+                      Formatters.price(product.oldPrice!),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF888888),
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: Color(0xFF888888),
+                      ),
                     ),
                   ],
-                  if (shopName != null) ...[
+                  if (product.shopName.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
-                      shopName!,
+                      product.shopName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF888888)),
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF888888)),
                     ),
                   ],
                 ],
@@ -833,9 +865,23 @@ class _ProductCardDark extends StatelessWidget {
       ),
     );
   }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFF3A3A3A),
+      child: const Center(
+        child:
+            Icon(Icons.bakery_dining, size: 50, color: Color(0xFF555555)),
+      ),
+    );
+  }
 }
 
-// ===== CUSTOM SLIVER DELEGATE: Location → Search (PINNED) → Banner =====
+// ════════════════════════════════════════════════════════════════════
+//  CUSTOM SLIVER DELEGATE
+// ════════════════════════════════════════════════════════════════════
+
 class _BuyerHomeSliverDelegate extends SliverPersistentHeaderDelegate {
   final double statusBarHeight;
   final Widget searchBar;
@@ -861,14 +907,14 @@ class _BuyerHomeSliverDelegate extends SliverPersistentHeaderDelegate {
   double get minExtent => statusBarHeight + _searchH;
 
   @override
-  bool shouldRebuild(covariant _BuyerHomeSliverDelegate oldDelegate) => true;
+  bool shouldRebuild(covariant _BuyerHomeSliverDelegate oldDelegate) =>
+      true;
 
   @override
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     final expandable = maxExtent - minExtent;
     final double t = (1.0 - shrinkOffset / expandable).clamp(0.0, 1.0);
-
     final radius = 24.0 * t;
 
     return ClipRRect(
@@ -892,50 +938,41 @@ class _BuyerHomeSliverDelegate extends SliverPersistentHeaderDelegate {
           ),
         ),
         child: Column(
-        children: [
-          SizedBox(height: statusBarHeight),
-
-          // 1-qator: Location + Coin + Notify (collapses)
-          ClipRect(
-            child: SizedBox(
-              height: _locationH * t,
-              child: Opacity(
-                opacity: t,
-                child: SizedBox(
-                  height: _locationH,
-                  child: middleRow,
+          children: [
+            SizedBox(height: statusBarHeight),
+            ClipRect(
+              child: SizedBox(
+                height: _locationH * t,
+                child: Opacity(
+                  opacity: t,
+                  child: SizedBox(height: _locationH, child: middleRow),
                 ),
               ),
             ),
-          ),
-
-          // 2-qator: Search bar (ALWAYS visible, FIXED)
-          SizedBox(
-            height: _searchH,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: searchBar,
+            SizedBox(
+              height: _searchH,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: searchBar,
+              ),
             ),
-          ),
-
-          // 3-qator: Promo Banner (collapses)
-          ClipRect(
-            child: SizedBox(
-              height: _bannerH * t,
-              child: Opacity(
-                opacity: t,
-                child: SizedBox(
-                  height: _bannerH,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                    child: promoBanner,
+            ClipRect(
+              child: SizedBox(
+                height: _bannerH * t,
+                child: Opacity(
+                  opacity: t,
+                  child: SizedBox(
+                    height: _bannerH,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                      child: promoBanner,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }

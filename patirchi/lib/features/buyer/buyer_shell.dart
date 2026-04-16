@@ -26,6 +26,35 @@ class _BuyerShellState extends State<BuyerShell> {
     ProfileScreen(),
   ];
 
+  static const _navItems = [
+    _NavItemData(
+      icon: Icons.storefront_outlined,
+      activeIcon: Icons.storefront_rounded,
+      label: 'Bozor',
+    ),
+    _NavItemData(
+      icon: Icons.grid_view_outlined,
+      activeIcon: Icons.grid_view_rounded,
+      label: 'Katalog',
+    ),
+    _NavItemData(
+      icon: Icons.shopping_cart_outlined,
+      activeIcon: Icons.shopping_cart_rounded,
+      label: 'Savatcha',
+      hasBadge: true,
+    ),
+    _NavItemData(
+      icon: Icons.favorite_outline_rounded,
+      activeIcon: Icons.favorite_rounded,
+      label: 'Sevimli',
+    ),
+    _NavItemData(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profil',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -33,113 +62,155 @@ class _BuyerShellState extends State<BuyerShell> {
       bottomNavigationBar: Consumer<CartProvider>(
         builder: (context, cart, _) {
           return Container(
-            height: 56,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1A1A1A),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(
-                  icon: Icons.home_rounded,
-                  label: 'Bozor',
-                  index: 0,
-                ),
-                _buildNavItem(
-                  icon: Icons.phone_in_talk_rounded,
-                  label: 'Aloqa',
-                  index: 1,
-                ),
-                _buildNavItem(
-                  icon: Icons.shopping_bag_rounded,
-                  label: 'Savat',
-                  index: 2,
-                  badgeCount: cart.itemCount,
-                ),
-                _buildNavItem(
-                  icon: Icons.favorite_rounded,
-                  label: 'Sevimli',
-                  index: 3,
-                ),
-                _buildNavItem(
-                  icon: Icons.person_rounded,
-                  label: 'Profil',
-                  index: 4,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, -2),
                 ),
               ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: SizedBox(
+                height: 54,
+                child: Row(
+                  children: List.generate(_navItems.length, (i) {
+                    final item = _navItems[i];
+                    final isSelected = _currentIndex == i;
+                    final badgeCount =
+                        item.hasBadge ? cart.itemCount : 0;
+
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _currentIndex = i),
+                        behavior: HitTestBehavior.opaque,
+                        child: _NavBarItem(
+                          icon: isSelected ? item.activeIcon : item.icon,
+                          label: item.label,
+                          isSelected: isSelected,
+                          badgeCount: badgeCount,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
             ),
           );
         },
       ),
     );
   }
+}
 
-  Widget _buildNavItem({
-    required IconData icon,
-    required String label,
-    required int index,
-    int badgeCount = 0,
-  }) {
-    final isSelected = _currentIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 56,
-        height: 56,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
+class _NavItemData {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool hasBadge;
+
+  const _NavItemData({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    this.hasBadge = false,
+  });
+}
+
+class _NavBarItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final int badgeCount;
+
+  const _NavBarItem({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    this.badgeCount = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Active indicator dot
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
                   icon,
-                  size: 24,
+                  size: 26,
                   color: isSelected
                       ? AppColors.primary
-                      : const Color(0xFF808080),
+                      : const Color(0xFF7A7A7A),
                 ),
-                if (badgeCount > 0)
-                  Positioned(
-                    right: -8,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: AppColors.error,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        '$badgeCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
+              ),
+              if (badgeCount > 0)
+                Positioned(
+                  right: -10,
+                  top: -6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.error,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFF1A1A1A),
+                        width: 1.5,
                       ),
                     ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    child: Text(
+                      badgeCount > 99 ? '99+' : '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-              ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              color: isSelected
+                  ? AppColors.primary
+                  : const Color(0xFF7A7A7A),
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected
-                    ? AppColors.primary
-                    : const Color(0xFF808080),
-              ),
+          ),
+          // Active indicator
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.only(top: 3),
+            width: isSelected ? 20 : 0,
+            height: 3,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(2),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

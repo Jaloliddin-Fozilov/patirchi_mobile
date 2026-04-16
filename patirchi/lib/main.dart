@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:patirchi/core/constants/enums.dart';
 import 'package:patirchi/core/theme/app_theme.dart';
+import 'package:patirchi/core/theme/theme_provider.dart';
 import 'package:patirchi/features/auth/presentation/providers/auth_provider.dart';
 import 'package:patirchi/features/auth/presentation/screens/splash_screen.dart';
 import 'package:patirchi/features/auth/presentation/screens/role_selection_screen.dart';
@@ -28,15 +29,20 @@ class PatirchiApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => BuyerHomeProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: MaterialApp(
-        title: 'Patirchi',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: ThemeMode.light,
-        initialRoute: '/',
-        onGenerateRoute: _onGenerateRoute,
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            title: 'Patirchi',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: themeProvider.themeMode,
+            initialRoute: '/',
+            onGenerateRoute: _onGenerateRoute,
+          );
+        },
       ),
     );
   }
