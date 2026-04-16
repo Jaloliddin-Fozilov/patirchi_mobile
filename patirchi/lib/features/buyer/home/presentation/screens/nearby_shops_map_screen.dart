@@ -7,6 +7,7 @@ import 'package:patirchi/core/theme/app_colors.dart';
 import '../../data/datasources/buyer_home_local_datasource.dart';
 import '../../data/models/shop_model.dart';
 import 'shop_detail_screen.dart';
+import '../widgets/map_widgets.dart';
 
 class NearbyShopsMapScreen extends StatefulWidget {
   const NearbyShopsMapScreen({super.key});
@@ -264,6 +265,209 @@ class _NearbyShopsMapScreenState extends State<NearbyShopsMapScreen> {
     );
   }
 
+  void _showFilterSheet(BuildContext context) {
+    bool onlyOpen = false;
+    final List<String> districts = [
+      'Chilonzor',
+      'Yunusobod',
+      'Shayhontohur',
+      'Mirzo Ulug\'bek',
+      'Olmazor',
+      'Yakkasaroy',
+    ];
+    final Set<String> selectedDistricts = {};
+    double minRating = 1.0;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                top: 8,
+                left: 20,
+                right: 20,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    'Filtr',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Only open toggle
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Faqat ochiq do\'konlar',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Switch.adaptive(
+                        value: onlyOpen,
+                        onChanged: (v) => setSheetState(() => onlyOpen = v),
+                        activeColor: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 12),
+                  // District checkboxes
+                  const Text(
+                    'Tuman bo\'yicha',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: districts.map((d) {
+                      final selected = selectedDistricts.contains(d);
+                      return FilterChip(
+                        label: Text(d),
+                        selected: selected,
+                        onSelected: (v) {
+                          setSheetState(() {
+                            if (v) {
+                              selectedDistricts.add(d);
+                            } else {
+                              selectedDistricts.remove(d);
+                            }
+                          });
+                        },
+                        selectedColor: AppColors.primary.withValues(alpha: 0.15),
+                        checkmarkColor: AppColors.primary,
+                        labelStyle: TextStyle(
+                          color: selected ? AppColors.primary : AppColors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: selected ? AppColors.primary : Colors.grey[300]!,
+                          ),
+                        ),
+                        backgroundColor: Colors.white,
+                        showCheckmark: false,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 12),
+                  // Rating slider
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Reyting bo\'yicha',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.star, color: Colors.amber, size: 16),
+                          const SizedBox(width: 4),
+                          Text(
+                            minRating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const Text(
+                            ' va yuqori',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: minRating,
+                    min: 1.0,
+                    max: 5.0,
+                    divisions: 8,
+                    activeColor: AppColors.primary,
+                    inactiveColor: AppColors.primary.withValues(alpha: 0.2),
+                    onChanged: (v) => setSheetState(() => minRating = v),
+                  ),
+                  const SizedBox(height: 16),
+                  // Apply button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Qo\'llash',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _onSearch(String query) {
     setState(() {
       if (query.isEmpty) {
@@ -324,10 +528,11 @@ class _NearbyShopsMapScreenState extends State<NearbyShopsMapScreen> {
               top: topPadding + 8,
               left: 16,
               right: 16,
-              child: _SearchBar(
+              child: MapSearchBar(
                 controller: _searchController,
                 onChanged: _onSearch,
                 onBack: () => Navigator.of(context).pop(),
+                onFilter: () => _showFilterSheet(context),
               ),
             ),
 
@@ -349,7 +554,7 @@ class _NearbyShopsMapScreenState extends State<NearbyShopsMapScreen> {
                           final isSelected = index == _selectedIndex;
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: _ShopCarouselCard(
+                            child: ShopCarouselCard(
                               shop: shop,
                               isSelected: isSelected,
                               onTap: () => _openShopDetail(shop),
@@ -428,285 +633,4 @@ class _NearbyShopsMapScreenState extends State<NearbyShopsMapScreen> {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════
-//  SEARCH BAR
-// ════════════════════════════════════════════════════════════════════
-
-class _SearchBar extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onBack;
-
-  const _SearchBar({
-    required this.controller,
-    required this.onChanged,
-    required this.onBack,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 4),
-          _CircleButton(
-            icon: Icons.arrow_back,
-            onTap: onBack,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onChanged: onChanged,
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppColors.textPrimary,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Nonvoyxonani qidirish...',
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                contentPadding: EdgeInsets.symmetric(vertical: 12),
-                hintStyle: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 15,
-                ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-                prefixIconConstraints: BoxConstraints(
-                  minWidth: 32,
-                  minHeight: 20,
-                ),
-              ),
-            ),
-          ),
-          Container(width: 1, height: 22, color: AppColors.divider),
-          IconButton(
-            icon: const Icon(Icons.tune, size: 22),
-            color: AppColors.textSecondary,
-            onPressed: () {
-              // TODO: Filter bottom sheet
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CircleButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _CircleButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, size: 20, color: AppColors.textPrimary),
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  HORIZONTAL SHOP CAROUSEL CARD
-// ════════════════════════════════════════════════════════════════════
-
-class _ShopCarouselCard extends StatelessWidget {
-  final ShopModel shop;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ShopCarouselCard({
-    required this.shop,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? AppColors.primary.withValues(alpha: 0.5)
-                : Colors.transparent,
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isSelected
-                  ? AppColors.primary.withValues(alpha: 0.15)
-                  : Colors.black.withValues(alpha: 0.08),
-              blurRadius: isSelected ? 12 : 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // Shop image
-              Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F0EB),
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF8D6E63), Color(0xFF5D4037)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                child: Icon(
-                  Icons.bakery_dining,
-                  size: 32,
-                  color: Colors.white.withValues(alpha: 0.7),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Shop info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Name
-                    Text(
-                      shop.name,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // Address
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          size: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            shop.address,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                    // Hours + Status
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.access_time,
-                          size: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          '${shop.openTime} - ${shop.closeTime}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _StatusBadge(isOpen: shop.isOpen),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Arrow
-              const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
-                size: 24,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  STATUS BADGE
-// ════════════════════════════════════════════════════════════════════
-
-class _StatusBadge extends StatelessWidget {
-  final bool isOpen;
-
-  const _StatusBadge({required this.isOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: isOpen
-            ? AppColors.success.withValues(alpha: 0.1)
-            : const Color(0xFFE65100).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        isOpen ? 'Ochiq' : 'Yopiq',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: isOpen ? AppColors.success : const Color(0xFFE65100),
-        ),
-      ),
-    );
-  }
-}
+// Widget'lar map_widgets.dart ga ko'chirilgan

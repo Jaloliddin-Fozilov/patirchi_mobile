@@ -48,94 +48,98 @@ class CartScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 children: [
                   // Cart items
-                  ...cart.items.map((item) => Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius:
-                              BorderRadius.circular(AppConstants.radiusL),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 6,
+                  ...cart.items.map((item) {
+                    final product = item.product;
+                    if (product == null) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius:
+                            BorderRadius.circular(AppConstants.radiusL),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: AppColors.warmBg,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                color: AppColors.warmBg,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.bakery_dining,
-                                  color: AppColors.secondary),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.product.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${Formatters.price(item.product.price)} / dona',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
+                            child: const Icon(Icons.bakery_dining,
+                                color: AppColors.secondary),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  Formatters.price(item.totalPrice),
+                                  product.name,
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _QtyButton(
-                                      icon: Icons.remove,
-                                      onTap: () => cart.updateQuantity(
-                                          item.product.id,
-                                          item.quantity - 1),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10),
-                                      child: Text('${item.quantity}',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold)),
-                                    ),
-                                    _QtyButton(
-                                      icon: Icons.add,
-                                      onTap: () => cart.updateQuantity(
-                                          item.product.id,
-                                          item.quantity + 1),
-                                    ),
-                                  ],
+                                Text(
+                                  '${Formatters.price(product.price)} / dona',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      )),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                Formatters.price(item.totalPrice),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _QtyButton(
+                                    icon: Icons.remove,
+                                    onTap: () => cart.updateQuantity(
+                                        product.id,
+                                        item.quantity - 1),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10),
+                                    child: Text('${item.quantity}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold)),
+                                  ),
+                                  _QtyButton(
+                                    icon: Icons.add,
+                                    onTap: () => cart.updateQuantity(
+                                        product.id,
+                                        item.quantity + 1),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
 
                   // Coupon
                   Container(
@@ -173,7 +177,17 @@ class CartScreen extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             ElevatedButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      cart.couponCode != null
+                                          ? "Kupon qo'llanildi"
+                                          : "Kupon kodi noto'g'ri",
+                                    ),
+                                  ),
+                                );
+                              },
                               child: const Text('Qo\'llash'),
                             ),
                           ],

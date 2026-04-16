@@ -5,6 +5,10 @@ import 'package:patirchi/core/widgets/phone_input.dart';
 import 'package:patirchi/core/utils/validators.dart';
 import '../providers/auth_provider.dart';
 
+/// Ro'yxatdan o'tish ekrani.
+///
+/// `POST /auth/signup/` — `{phone_number, password, password_confirm}`
+/// Muvaffaqiyatli bo'lsa login ekraniga yo'naltiradi.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -13,7 +17,6 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
@@ -22,44 +25,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
   }
 
-  void _register() async {
-    final name = _nameController.text.trim();
+  Future<void> _register() async {
     final phone = _phoneController.text.replaceAll(' ', '');
     final password = _passwordController.text;
     final confirm = _confirmController.text;
 
-    if (Validators.required(name) != null) {
-      _showError('Ismingizni kiriting');
-      return;
-    }
+    // Validatsiya
     if (Validators.phone(phone) != null) {
-      _showError('Telefon raqamni to\'g\'ri kiriting');
+      _showSnackBar('Telefon raqamni to\'g\'ri kiriting');
       return;
     }
     if (Validators.password(password) != null) {
-      _showError('Parol kamida 4 ta belgi bo\'lishi kerak');
+      _showSnackBar('Parol kamida 4 ta belgi bo\'lishi kerak');
       return;
     }
     if (password != confirm) {
-      _showError('Parollar mos kelmadi');
+      _showSnackBar('Parollar mos kelmadi');
       return;
     }
 
+    final fullPhone = phone.startsWith('+998') ? phone : '+998$phone';
     final auth = context.read<AuthProvider>();
-    final success = await auth.register(name, phone, password);
-    if (success && mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+    final success = await auth.signup(fullPhone, password, confirm);
+
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ro\'yxatdan muvaffaqiyatli o\'tdingiz! Endi kiring.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context); // Login ekraniga qaytish
+    } else {
+      _showSnackBar(auth.errorMessage ?? 'Ro\'yxatdan o\'tishda xato');
     }
   }
 
-  void _showError(String msg) {
+  void _showSnackBar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
@@ -86,7 +96,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.bakery_dining, size: 48, color: AppColors.primary),
+                const Icon(
+                  Icons.bakery_dining,
+                  size: 48,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(height: 12),
                 const Text(
                   'Ro\'yxatdan o\'tish',
@@ -96,16 +110,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    hintText: 'Ismingiz',
-                    prefixIcon: Icon(Icons.person_outline),
+                const SizedBox(height: 8),
+                const Text(
+                  'Hisob yaratish uchun ma\'lumotlarni kiriting',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 24),
                 PhoneInput(controller: _phoneController),
                 const SizedBox(height: 14),
                 TextField(
@@ -115,7 +129,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hintText: 'Parol',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscure1 ? Icons.visibility_off : Icons.visibility),
+                      icon: Icon(
+                        _obscure1 ? Icons.visibility_off : Icons.visibility,
+                      ),
                       onPressed: () => setState(() => _obscure1 = !_obscure1),
                     ),
                   ),
@@ -128,7 +144,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hintText: 'Parolni tasdiqlang',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility),
+                      icon: Icon(
+                        _obscure2 ? Icons.visibility_off : Icons.visibility,
+                      ),
                       onPressed: () => setState(() => _obscure2 = !_obscure2),
                     ),
                   ),
@@ -156,8 +174,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('Akkauntingiz bormi? ',
-                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                    const Text(
+                      'Akkauntingiz bormi? ',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                     GestureDetector(
                       onTap: () => Navigator.pop(context),
                       child: const Text(

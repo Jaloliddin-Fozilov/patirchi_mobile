@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:patirchi/core/widgets/product_card.dart';
 import 'package:patirchi/core/widgets/empty_state.dart';
 import 'package:patirchi/features/buyer/home/presentation/providers/buyer_home_provider.dart';
+import 'package:patirchi/features/buyer/home/presentation/screens/product_detail_screen.dart';
 
 class WishlistScreen extends StatelessWidget {
   const WishlistScreen({super.key});
@@ -37,7 +38,14 @@ class WishlistScreen extends StatelessWidget {
               price: product.price,
               shopName: product.shopName,
               isFavorite: true,
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProductDetailScreen(product: product),
+                  ),
+                );
+              },
               onFavoriteTap: () => provider.toggleFavorite(product.id),
             );
           },

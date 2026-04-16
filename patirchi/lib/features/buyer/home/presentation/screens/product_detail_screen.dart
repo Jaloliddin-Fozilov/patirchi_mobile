@@ -59,7 +59,7 @@ class ProductDetailScreen extends StatelessWidget {
                               Icon(Icons.scale, size: 16, color: AppColors.textSecondary),
                               const SizedBox(width: 4),
                               Text(
-                                Formatters.weight(product.weight, product.weightUnit),
+                                Formatters.weight(product.weightDouble, product.weightUnit),
                                 style: const TextStyle(
                                   fontSize: 14,
                                   color: AppColors.textSecondary,
@@ -135,7 +135,7 @@ class ProductDetailScreen extends StatelessWidget {
                             ),
                           ),
                           // Ingredients
-                          if (product.ingredients.isNotEmpty) ...[
+                          if (product.ingredientsList.isNotEmpty) ...[
                             const SizedBox(height: 24),
                             const Text(
                               'Tarkibi',
@@ -149,7 +149,7 @@ class ProductDetailScreen extends StatelessWidget {
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
-                              children: product.ingredients.map((ingredient) {
+                              children: product.ingredientsList.map((ingredient) {
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 14,
@@ -244,7 +244,11 @@ class _ProductImageHeader extends StatelessWidget {
           right: 12,
           child: _CircleButton(
             icon: Icons.share_outlined,
-            onTap: () {},
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Ulashish: ${product.name}')),
+              );
+            },
           ),
         ),
 
@@ -326,7 +330,7 @@ class _AddToCartBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
-    final cartItem = cart.items.where((i) => i.product.id == product.id);
+    final cartItem = cart.items.where((i) => i.product?.id == product.id);
     final int qty = cartItem.isNotEmpty ? cartItem.first.quantity : 0;
 
     return Container(

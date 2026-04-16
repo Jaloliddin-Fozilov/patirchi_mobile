@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:patirchi/core/theme/app_colors.dart';
 import 'package:patirchi/core/widgets/app_sidebar.dart';
 import 'package:patirchi/features/profile/presentation/screens/profile_screen.dart';
+import 'package:patirchi/features/profile/presentation/screens/settings_screen.dart';
+import 'package:patirchi/features/supplier/orders/presentation/providers/supplier_orders_provider.dart';
+import 'package:patirchi/features/supplier/products/presentation/providers/supplier_products_provider.dart';
+import 'package:patirchi/features/supplier/products/presentation/screens/supplier_products_screen.dart';
+import 'package:patirchi/features/supplier/orders/presentation/screens/supplier_orders_screen.dart';
+import 'package:patirchi/features/supplier/stats/presentation/screens/supplier_stats_screen.dart';
+import 'package:patirchi/features/chat/presentation/screens/chat_list_screen.dart';
+import 'package:provider/provider.dart';
 
 class SupplierShell extends StatefulWidget {
   const SupplierShell({super.key});
@@ -13,11 +21,26 @@ class SupplierShell extends StatefulWidget {
 class _SupplierShellState extends State<SupplierShell> {
   int _currentIndex = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    // Ilk yuklanishda API dan ma'lumotlarni olish
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SupplierProductsProvider>().init();
+      context.read<SupplierOrdersProvider>().loadOrders();
+    });
+  }
+
+  String _appBarTitle(int index) {
+    const titles = ["Mahsulotlar", "Buyurtmalar", "Statistika", "Chat", "Profil"];
+    return titles[index];
+  }
+
   final _screens = const [
-    Center(child: Text('Bozor - Mahsulotlar')),
-    Center(child: Text('Buyurtmalar')),
-    Center(child: Text('Statistika')),
-    Center(child: Text('Chat')),
+    SupplierProductsScreen(),
+    SupplierOrdersScreen(),
+    SupplierStatsScreen(),
+    ChatListScreen(),
     ProfileScreen(),
   ];
 
@@ -26,14 +49,25 @@ class _SupplierShellState extends State<SupplierShell> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.supplierAccent,
-        title: const Text("Ta'minotchi"),
+        foregroundColor: Colors.white,
+        title: Text(_appBarTitle(_currentIndex)),
         actions: [
-          IconButton(icon: const Icon(Icons.share), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text("Do'konni ulashish tez kunda")),
+              );
+            },
+          ),
           Stack(
             children: [
               IconButton(
                   icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () {}),
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/notifications');
+                  }),
               Positioned(
                 right: 8,
                 top: 8,
@@ -58,9 +92,27 @@ class _SupplierShellState extends State<SupplierShell> {
             title: "Do'konlar",
             children: [
               SidebarMenuItem(
-                  icon: Icons.list, title: "Do'konlar ro'yxati", onTap: () {}),
+                icon: Icons.list,
+                title: "Do'konlar ro'yxati",
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text("Do'konlar ro'yxati tez kunda")),
+                  );
+                },
+              ),
               SidebarMenuItem(
-                  icon: Icons.add, title: "Do'kon qo'shish", onTap: () {}),
+                icon: Icons.add,
+                title: "Do'kon qo'shish",
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text("Do'kon qo'shish tez kunda")),
+                  );
+                },
+              ),
             ],
           ),
           SidebarMenuItem(
@@ -68,9 +120,21 @@ class _SupplierShellState extends State<SupplierShell> {
             title: 'Buyurtmalar',
             children: [
               SidebarMenuItem(
-                  icon: Icons.inbox, title: 'Kiruvchi', onTap: () {}),
+                icon: Icons.inbox,
+                title: 'Kiruvchi',
+                onTap: () => _navigateTo(1),
+              ),
               SidebarMenuItem(
-                  icon: Icons.outbox, title: 'Chiquvchi', onTap: () {}),
+                icon: Icons.outbox,
+                title: 'Chiquvchi',
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Chiquvchi buyurtmalar tez kunda')),
+                  );
+                },
+              ),
             ],
           ),
           SidebarMenuItem(
@@ -78,19 +142,55 @@ class _SupplierShellState extends State<SupplierShell> {
             title: 'Moliya',
             children: [
               SidebarMenuItem(
-                  icon: Icons.trending_up, title: 'Daromad', onTap: () {}),
+                icon: Icons.trending_up,
+                title: 'Daromad',
+                onTap: () => _navigateTo(2),
+              ),
               SidebarMenuItem(
-                  icon: Icons.trending_down, title: 'Xarajat', onTap: () {}),
+                icon: Icons.trending_down,
+                title: 'Xarajat',
+                onTap: () => _navigateTo(2),
+              ),
             ],
           ),
           SidebarMenuItem(
-              icon: Icons.work_outline, title: 'Vakansiya', onTap: () {}),
+            icon: Icons.work_outline,
+            title: 'Vakansiya',
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Vakansiyalar tez kunda')),
+              );
+            },
+          ),
           SidebarMenuItem(
-              icon: Icons.bar_chart, title: 'Statistika', onTap: () {}),
+            icon: Icons.bar_chart,
+            title: 'Statistika',
+            onTap: () => _navigateTo(2),
+          ),
           SidebarMenuItem(
-              icon: Icons.people_outline, title: 'Referal', onTap: () {}),
+            icon: Icons.people_outline,
+            title: 'Referal',
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Referal tizimi tez kunda')),
+              );
+            },
+          ),
           SidebarMenuItem(
-              icon: Icons.settings, title: 'Sozlamalar', onTap: () {}),
+            icon: Icons.settings,
+            title: 'Sozlamalar',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
         ],
       ),
       body: IndexedStack(index: _currentIndex, children: _screens),
@@ -119,5 +219,10 @@ class _SupplierShellState extends State<SupplierShell> {
         ],
       ),
     );
+  }
+
+  void _navigateTo(int index) {
+    Navigator.pop(context);
+    setState(() => _currentIndex = index);
   }
 }

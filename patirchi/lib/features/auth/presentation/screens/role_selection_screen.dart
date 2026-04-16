@@ -142,7 +142,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                         );
                       } else {
                         final auth = context.read<AuthProvider>();
-                        auth.selectRole(_roles[_currentPage]);
+                        final selectedRole = _roles[_currentPage];
+                        // Backend rollari: ordinary/business/delivery
+                        final roleString = switch (selectedRole) {
+                          UserRole.buyer => 'ordinary',
+                          UserRole.bakery || UserRole.supplier => 'business',
+                          UserRole.courier => 'delivery',
+                        };
+                        auth.selectRole(roleString);
                         Navigator.pushNamed(context, '/login');
                       }
                     },

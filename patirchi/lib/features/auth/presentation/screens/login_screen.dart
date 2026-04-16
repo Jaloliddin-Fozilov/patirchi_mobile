@@ -4,6 +4,10 @@ import 'package:patirchi/core/theme/app_colors.dart';
 import 'package:patirchi/core/widgets/phone_input.dart';
 import '../providers/auth_provider.dart';
 
+/// OTP asosidagi kirish ekrani.
+///
+/// Foydalanuvchi telefon raqamini kiritadi → "Kirish" bosadi →
+/// backend OTP yuboradi → OTP ekraniga o'tish.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -11,45 +15,49 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
-  void _login() async {
-    final auth = context.read<AuthProvider>();
+  Future<void> _onLoginPressed() async {
     final phone = _phoneController.text.replaceAll(' ', '');
-    final password = _passwordController.text;
-
-    if (phone.isEmpty && _emailController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Telefon yoki email kiriting')),
-      );
+    if (phone.isEmpty) {
+      _showSnackBar('Telefon raqamingizni kiriting');
       return;
     }
 
-    final success = await auth.login(phone, password);
-    if (success && mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+    // +998 prefixi qo'shilganligini tekshir
+    final fullPhone = phone.startsWith('+998') ? phone : '+998$phone';
+    if (fullPhone.length != 13) {
+      _showSnackBar('Telefon raqami noto\'g\'ri. Format: +998XXXXXXXXX');
+      return;
     }
+
+    final auth = context.read<AuthProvider>();
+    final success = await auth.login(fullPhone);
+
+    if (!mounted) return;
+
+    if (success) {
+      Navigator.pushNamed(
+        context,
+        '/otp',
+        arguments: fullPhone,
+      );
+    } else {
+      _showSnackBar(auth.errorMessage ?? 'Xato yuz berdi');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -101,84 +109,24 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
                 const SizedBox(height: 4),
                 Consumer<AuthProvider>(
-                  builder: (_, auth, __) => Text(
-                    auth.selectedRole.label,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.warmBgMedium,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TabBar(
-                    controller: _tabController,
-                    indicator: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    labelColor: Colors.white,
-                    unselectedLabelColor: AppColors.textSecondary,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    dividerColor: Colors.transparent,
-                    tabs: const [
-                      Tab(text: 'Telefon raqam'),
-                      Tab(text: 'Email'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 70,
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Telefon raqamingiz',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          PhoneInput(controller: _phoneController),
-                        ],
+                  builder: (_, auth, __) {
+                    final roleLabel = auth.selectedRole == 'business'
+                        ? 'Biznes hisob'
+                        : 'Oddiy foydalanuvchi';
+                    return Text(
+                      roleLabel,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Email manzilingiz',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(
-                              hintText: 'email@example.com',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 28),
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Parol',
+                    'Telefon raqamingiz',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
@@ -186,44 +134,24 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
                 const SizedBox(height: 6),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    hintText: '••••••',
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: AppColors.textSecondary,
-                      ),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
-                    ),
-                  ),
-                ),
+                PhoneInput(controller: _phoneController),
                 const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {},
-                    child: const Text(
-                      'Parolni unutdingizmi?',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'SMS orqali tasdiqlash kodi yuboriladi',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 Consumer<AuthProvider>(
                   builder: (_, auth, __) => SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: auth.isLoading ? null : _login,
+                      onPressed: auth.isLoading ? null : _onLoginPressed,
                       child: auth.isLoading
                           ? const SizedBox(
                               height: 20,

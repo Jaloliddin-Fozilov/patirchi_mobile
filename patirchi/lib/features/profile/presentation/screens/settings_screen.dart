@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:patirchi/core/theme/app_colors.dart';
 import 'package:patirchi/core/theme/theme_provider.dart';
 import 'package:patirchi/features/auth/presentation/providers/auth_provider.dart';
+import 'about_screen.dart';
+import 'edit_profile_screen.dart';
+import 'change_password_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -62,7 +65,7 @@ class SettingsScreen extends StatelessWidget {
                       radius: 26,
                       backgroundColor: const Color(0xFF7C4DFF).withValues(alpha: 0.15),
                       child: Text(
-                        (user?.name ?? 'P')[0].toUpperCase(),
+                        (user?.fullName ?? 'P')[0].toUpperCase(),
                         style: const TextStyle(
                           color: Color(0xFF7C4DFF),
                           fontSize: 20,
@@ -71,7 +74,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ),
                     title: Text(
-                      user?.name ?? 'Foydalanuvchi',
+                      user?.fullName ?? 'Foydalanuvchi',
                       style: TextStyle(
                         color: textColor,
                         fontWeight: FontWeight.w600,
@@ -86,7 +89,12 @@ class SettingsScreen extends StatelessWidget {
                       Icons.chevron_right,
                       color: secondaryText,
                     ),
-                    onTap: () {},
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Profil tahrirlash tez kunda')),
+                      );
+                    },
                   ),
                 ),
 
@@ -119,7 +127,14 @@ class SettingsScreen extends StatelessWidget {
                         title: "Profil ma'lumotlari",
                         textColor: textColor,
                         iconColor: secondaryText,
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const EditProfileScreen(),
+                            ),
+                          );
+                        },
                       ),
                       Divider(
                           height: 1, indent: 56, color: dividerColor),
@@ -128,7 +143,14 @@ class SettingsScreen extends StatelessWidget {
                         title: 'Parol',
                         textColor: textColor,
                         iconColor: secondaryText,
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ChangePasswordScreen(),
+                            ),
+                          );
+                        },
                       ),
                       Divider(
                           height: 1, indent: 56, color: dividerColor),
@@ -137,7 +159,9 @@ class SettingsScreen extends StatelessWidget {
                         title: 'Bildirishnomalar',
                         textColor: textColor,
                         iconColor: secondaryText,
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.pushNamed(context, '/notifications');
+                        },
                       ),
                       Divider(
                           height: 1, indent: 56, color: dividerColor),
@@ -176,7 +200,14 @@ class SettingsScreen extends StatelessWidget {
                         title: 'Ilova haqida',
                         textColor: textColor,
                         iconColor: secondaryText,
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AboutScreen(),
+                            ),
+                          );
+                        },
                       ),
                       Divider(
                           height: 1, indent: 56, color: dividerColor),
@@ -185,7 +216,12 @@ class SettingsScreen extends StatelessWidget {
                         title: 'Yordam / FAQ',
                         textColor: textColor,
                         iconColor: secondaryText,
-                        onTap: () {},
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Yordam sahifasi tez kunda')),
+                          );
+                        },
                       ),
                       Divider(
                           height: 1, indent: 56, color: dividerColor),

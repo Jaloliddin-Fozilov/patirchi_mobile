@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:patirchi/core/theme/app_colors.dart';
+import '../providers/auth_provider.dart';
 
+/// Splash ekrani — ilovani ishga tushirishda ko'rsatiladi.
+///
+/// Animatsiya ko'rsatilayotganda:
+/// 1. Saqlangan tokenlar mavjudmi tekshiradi
+/// 2. Mavjud bo'lsa — `GET /auth/me/` orqali sessiyani tiklaydi
+/// 3. Muvaffaqiyatli → `/home`
+/// 4. Muvaffaqiyatsiz → `/role-selection`
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -23,11 +32,29 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/role-selection');
-      }
-    });
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // Minimal splash ko'rsatish vaqti
+    await Future.wait([
+      Future.delayed(const Duration(milliseconds: 1800)),
+      _checkAuthState(),
+    ]);
+  }
+
+  Future<void> _checkAuthState() async {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    final isLoggedIn = await auth.tryAutoLogin();
+
+    if (!mounted) return;
+
+    if (isLoggedIn) {
+      Navigator.pushReplacementNamed(context, '/home');
+    } else {
+      Navigator.pushReplacementNamed(context, '/role-selection');
+    }
   }
 
   @override
@@ -81,6 +108,15 @@ class _SplashScreenState extends State<SplashScreen>
                 style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary.withValues(alpha: 0.8),
+                ),
+              ),
+              const SizedBox(height: 48),
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                 ),
               ),
             ],

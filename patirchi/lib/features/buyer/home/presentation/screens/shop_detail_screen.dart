@@ -15,7 +15,7 @@ class ShopDetailScreen extends StatelessWidget {
 
   List<ProductModel> _getShopProducts() {
     return BuyerHomeLocalDatasource.products
-        .where((p) => p.shopId == shop.id)
+        .where((p) => p.store?.id == shop.id)
         .toList();
   }
 
@@ -268,7 +268,7 @@ class _ProductListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
     // Find current quantity in cart
-    final cartItem = cart.items.where((i) => i.product.id == product.id);
+    final cartItem = cart.items.where((i) => i.product?.id == product.id);
     final int qty = cartItem.isNotEmpty ? cartItem.first.quantity : 0;
 
     return Container(
@@ -320,7 +320,7 @@ class _ProductListItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  Formatters.weight(product.weight, product.weightUnit),
+                  Formatters.weight(product.weightDouble, product.weightUnit),
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -541,7 +541,7 @@ class _CartBottomBar extends StatelessWidget {
                 flex: 3,
                 child: GestureDetector(
                   onTap: () {
-                    // TODO: Navigate to order confirmation
+                    Navigator.pushNamed(context, '/checkout');
                   },
                   child: Container(
                     height: 52,
