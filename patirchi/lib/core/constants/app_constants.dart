@@ -4,8 +4,8 @@ class AppConstants {
   static const String appName = 'Patirchi';
   static const String appVersion = '1.0.0';
 
-  // API (for future integration)
-  static const String baseUrl = 'https://api.patirchi.uz/api/v1';
+  // API backend
+  static const String baseUrl = 'https://app.patirchi.uz/api/v1';
 
   // Phone
   static const String phonePrefix = '+998';
