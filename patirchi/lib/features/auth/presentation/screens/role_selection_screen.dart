@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:patirchi/core/constants/enums.dart';
+import 'package:patirchi/core/dev_mode/widgets/dev_tap_detector.dart';
 import 'package:patirchi/core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -69,7 +70,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        title: const Text('Patirchi'),
+        title: const DevTapDetector(child: Text('Patirchi')),
         leading: const Padding(
           padding: EdgeInsets.all(8),
           child: Icon(Icons.bakery_dining, color: Colors.white),
@@ -141,15 +142,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                           curve: Curves.easeInOut,
                         );
                       } else {
+                        // Onboarding yakunlangach foydalanuvchi har doim
+                        // "Xaridor" (ordinary) sifatida tizimga kiradi.
+                        // Kerak bo'lsa profil ekranidan rol almashtirishi mumkin.
                         final auth = context.read<AuthProvider>();
-                        final selectedRole = _roles[_currentPage];
-                        // Backend rollari: ordinary/business/delivery
-                        final roleString = switch (selectedRole) {
-                          UserRole.buyer => 'ordinary',
-                          UserRole.bakery || UserRole.supplier => 'business',
-                          UserRole.courier => 'delivery',
-                        };
-                        auth.selectRole(roleString);
+                        auth.selectRole('ordinary');
                         Navigator.pushNamed(context, '/login');
                       }
                     },

@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:patirchi/core/constants/app_constants.dart';
+import 'package:patirchi/core/dev_mode/api_observer.dart';
+import 'package:patirchi/core/dev_mode/models/network_log_entry.dart';
+import 'package:patirchi/core/network/api_config.dart';
 import 'package:patirchi/core/storage/secure_storage_service.dart';
 import 'api_endpoints.dart';
 import 'api_exception.dart';
@@ -112,40 +116,85 @@ class ApiClient {
     Map<String, String> fields = const {},
     Map<String, String> files = const {},
   }) async {
-    final token = await _getToken();
-    final boundary = _generateBoundary();
-    final uri = _buildUri(path, null);
+    final entryId = _generateEntryId();
+    final startedAt = DateTime.now();
+    final baseUrl = ApiConfig.instance.baseUrl;
 
-    final httpClient = HttpClient()..connectionTimeout = _connectTimeout;
-
-    final request = await httpClient
-        .postUrl(uri)
-        .timeout(
-          _connectTimeout,
-          onTimeout: () => throw ApiException.timeout(),
-        );
-
-    request.headers.set(
-      HttpHeaders.contentTypeHeader,
-      'multipart/form-data; boundary=$boundary',
+    // Observer: multipart so'rov boshlangani (fayl bytes log ga tushmasin)
+    ApiObserverRegistry.emitStart(
+      NetworkLogEntry.starting(
+        method: 'POST',
+        url: baseUrl + path,
+        path: path,
+        requestBody: {
+          '_type': 'multipart',
+          'fields': fields.keys.toList(),
+          'files': files.keys.toList(),
+        },
+      ).copyWith(id: entryId),
     );
-    request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-    if (token != null) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+
+    try {
+      final token = await _getToken();
+      final boundary = _generateBoundary();
+      final uri = _buildUri(path, null);
+
+      final httpClient = HttpClient()..connectionTimeout = _connectTimeout;
+
+      final request = await httpClient
+          .postUrl(uri)
+          .timeout(
+            _connectTimeout,
+            onTimeout: () => throw ApiException.timeout(),
+          );
+
+      request.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'multipart/form-data; boundary=$boundary',
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      if (token != null) {
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      }
+
+      final body = await _buildMultipartBody(boundary, fields, files);
+      request.headers.set(HttpHeaders.contentLengthHeader, body.length);
+      request.add(body);
+
+      final response = await request
+          .close()
+          .timeout(_readTimeout, onTimeout: () => throw ApiException.timeout());
+
+      final responseBody = await response.transform(utf8.decoder).join();
+      httpClient.close();
+
+      final result = _handleResponse(response.statusCode, responseBody);
+
+      // Observer: muvaffaqiyatli yakunlandi
+      ApiObserverRegistry.emitComplete(
+        entryId,
+        statusCode: response.statusCode,
+        responseBody: _safeDecodeForLog(responseBody),
+        duration: DateTime.now().difference(startedAt),
+      );
+
+      return result;
+    } on ApiException catch (e) {
+      ApiObserverRegistry.emitError(
+        entryId,
+        error: e.message,
+        statusCode: e.statusCode,
+        duration: DateTime.now().difference(startedAt),
+      );
+      rethrow;
+    } on Object catch (e) {
+      ApiObserverRegistry.emitError(
+        entryId,
+        error: e.toString(),
+        duration: DateTime.now().difference(startedAt),
+      );
+      rethrow;
     }
-
-    final body = await _buildMultipartBody(boundary, fields, files);
-    request.headers.set(HttpHeaders.contentLengthHeader, body.length);
-    request.add(body);
-
-    final response = await request
-        .close()
-        .timeout(_readTimeout, onTimeout: () => throw ApiException.timeout());
-
-    final responseBody = await response.transform(utf8.decoder).join();
-    httpClient.close();
-
-    return _handleResponse(response.statusCode, responseBody);
   }
 
   // ---------------------------------------------------------------------------
@@ -159,6 +208,21 @@ class ApiClient {
     Map<String, String>? queryParams,
     bool isRetry = false,
   }) async {
+    final entryId = _generateEntryId();
+    final startedAt = DateTime.now();
+    final baseUrl = ApiConfig.instance.baseUrl;
+
+    // Observer: so'rov boshlangani xabari
+    ApiObserverRegistry.emitStart(
+      NetworkLogEntry.starting(
+        method: method,
+        url: baseUrl + path,
+        path: path,
+        requestBody: body,
+        queryParams: queryParams,
+      ).copyWith(id: entryId),
+    );
+
     try {
       final token = await _getToken();
       final uri = _buildUri(path, queryParams);
@@ -197,23 +261,66 @@ class ApiClient {
       if (response.statusCode == 401 && !isRetry) {
         final refreshed = await _tryRefreshToken();
         if (refreshed) {
-          return _request(method, path, body: body, queryParams: queryParams, isRetry: true);
+          return _request(
+            method,
+            path,
+            body: body,
+            queryParams: queryParams,
+            isRetry: true,
+          );
         }
       }
 
-      return _handleResponse(response.statusCode, responseBody);
-    } on ApiException {
+      final result = _handleResponse(response.statusCode, responseBody);
+
+      // Observer: muvaffaqiyatli yakunlandi
+      ApiObserverRegistry.emitComplete(
+        entryId,
+        statusCode: response.statusCode,
+        responseBody: _safeDecodeForLog(responseBody),
+        duration: DateTime.now().difference(startedAt),
+      );
+
+      return result;
+    } on ApiException catch (e) {
+      // Observer: API exception
+      ApiObserverRegistry.emitError(
+        entryId,
+        error: e.message,
+        statusCode: e.statusCode,
+        duration: DateTime.now().difference(startedAt),
+      );
       rethrow;
     } on SocketException {
+      ApiObserverRegistry.emitError(
+        entryId,
+        error: 'Internet aloqasi yo\'q',
+        duration: DateTime.now().difference(startedAt),
+      );
       throw ApiException.noInternet();
     } on HandshakeException {
+      ApiObserverRegistry.emitError(
+        entryId,
+        error: 'SSL/TLS xato',
+        duration: DateTime.now().difference(startedAt),
+      );
       throw ApiException.noInternet();
     } on FormatException {
+      ApiObserverRegistry.emitError(
+        entryId,
+        error: 'Server noto\'g\'ri formatda javob qaytardi',
+        duration: DateTime.now().difference(startedAt),
+      );
       throw const ApiException(
         message: 'Server noto\'g\'ri formatda javob qaytardi.',
         errorCode: 'PARSE_ERROR',
       );
     } on Object catch (e) {
+      ApiObserverRegistry.emitError(
+        entryId,
+        error: e.toString(),
+        duration: DateTime.now().difference(startedAt),
+      );
       throw ApiException.unknown(e);
     }
   }
@@ -299,9 +406,10 @@ class ApiClient {
     }
   }
 
-  /// To'liq URI ni quradi.
+  /// To'liq URI ni quradi (ApiConfig.instance.baseUrl ishlatadi).
   Uri _buildUri(String path, Map<String, String>? queryParams) {
-    final base = Uri.parse(AppConstants.baseUrl + path);
+    final baseUrl = ApiConfig.instance.baseUrl;
+    final base = Uri.parse(baseUrl + path);
     if (queryParams == null || queryParams.isEmpty) return base;
     return base.replace(
       queryParameters: {
@@ -309,6 +417,25 @@ class ApiClient {
         ...queryParams,
       },
     );
+  }
+
+  /// Log uchun unique entry ID hosil qiladi.
+  String _generateEntryId() {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final rand = math.Random().nextInt(99999);
+    return '${ts}_$rand';
+  }
+
+  /// Response body ni log uchun xavfsiz decode qiladi.
+  Map<String, dynamic>? _safeDecodeForLog(String body) {
+    if (body.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      return {'_data': decoded};
+    } on Object {
+      return {'_raw': body.length > 500 ? body.substring(0, 500) : body};
+    }
   }
 
   /// Multipart boundary hosil qiladi.

@@ -117,6 +117,45 @@ class SecureStorageService {
   }
 
   // ---------------------------------------------------------------------------
+  // Developer mode
+  // ---------------------------------------------------------------------------
+
+  static const String _keyDevMode = 'dev_mode_enabled';
+
+  /// Developer mode yoqilganligini qaytaradi.
+  Future<bool> getDevMode() async {
+    return _store[_keyDevMode] == 'true';
+  }
+
+  /// Developer mode holatini saqlaydi.
+  Future<void> setDevMode(bool value) async {
+    _store[_keyDevMode] = value.toString();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Debug utilities
+  // ---------------------------------------------------------------------------
+
+  /// Barcha kalit-qiymatlarni qaytaradi (tokenlar qisman yashirilgan).
+  Future<Map<String, String?>> getAllForDebug() async {
+    return _store.map((key, value) {
+      // Tokenlar va maxfiy kalitlarni qisman yashirish
+      if (key.contains('token') && value != null && value.length > 20) {
+        final masked =
+            '${value.substring(0, 10)}...${value.substring(value.length - 10)}';
+        return MapEntry(key, masked);
+      }
+      return MapEntry(key, value);
+    });
+  }
+
+  /// Barcha ma'lumotlarni tozalaydi — dev mode ham.
+  /// [clear] faqat auth ma'lumotlarini o'chiradi, bu esa hammasini.
+  Future<void> clearAll() async {
+    _store.clear();
+  }
+
+  // ---------------------------------------------------------------------------
   // Login holati
   // ---------------------------------------------------------------------------
 

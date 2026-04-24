@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:patirchi/core/constants/enums.dart';
+import 'package:patirchi/core/dev_mode/api_observer.dart';
+import 'package:patirchi/core/dev_mode/app_logger.dart';
+import 'package:patirchi/core/dev_mode/dev_mode_service.dart';
+import 'package:patirchi/core/dev_mode/provider_registry.dart';
+import 'package:patirchi/core/dev_mode/stores/log_store.dart';
+import 'package:patirchi/core/dev_mode/stores/network_log_store.dart';
+import 'package:patirchi/core/dev_mode/widgets/dev_mode_overlay.dart';
 import 'package:patirchi/core/theme/app_theme.dart';
 import 'package:patirchi/core/theme/theme_provider.dart';
 import 'package:patirchi/features/auth/presentation/providers/auth_provider.dart';
@@ -34,7 +41,29 @@ import 'package:patirchi/features/courier/courier_shell.dart';
 import 'package:patirchi/features/courier/deliveries/presentation/providers/courier_provider.dart';
 import 'package:patirchi/features/courier/wallet/presentation/providers/wallet_provider.dart';
 
-void main() {
+// ---------------------------------------------------------------------------
+// Global dev mode singletons
+// ---------------------------------------------------------------------------
+
+final kNetworkLogStore = NetworkLogStore.instance;
+final kLogStore = LogStore.instance;
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Developer mode holatini yuklash
+  await DevModeService.instance.init();
+
+  // Network observer o'rnatish
+  ApiObserverRegistry.observer = RecordingApiObserver(kNetworkLogStore);
+
+  // debugPrint ni ushlab olish
+  AppLogger.install(kLogStore);
+
   runApp(const PatirchiApp());
 }
 
@@ -45,6 +74,12 @@ class PatirchiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Dev mode singletons — Provider sifatida ro'yxatdan o'tkazish
+        ChangeNotifierProvider<NetworkLogStore>.value(value: kNetworkLogStore),
+        ChangeNotifierProvider<LogStore>.value(value: kLogStore),
+        ChangeNotifierProvider<DevModeService>.value(
+          value: DevModeService.instance,
+        ),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => BuyerHomeProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
@@ -66,6 +101,8 @@ class PatirchiApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
+          // Provider snapshot'larini bir marta ro'yxatdan o'tkazish
+          _registerProviderSnapshots(context);
           return MaterialApp(
             title: 'Patirchi',
             debugShowCheckedModeBanner: false,
@@ -74,9 +111,50 @@ class PatirchiApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             initialRoute: '/',
             onGenerateRoute: _onGenerateRoute,
+            // Developer mode FAB overlay — barcha screen ustida
+            builder: DevModeOverlay.wrap,
           );
         },
       ),
+    );
+  }
+
+  /// Dev panel State tab uchun provider snapshot'larini ro'yxatdan o'tkazadi.
+  ///
+  /// [Consumer.builder] ichida chaqiriladi, shu sababli context tayyor.
+  void _registerProviderSnapshots(BuildContext context) {
+    final auth = context.read<AuthProvider>();
+    final cart = context.read<CartProvider>();
+    final theme = context.read<ThemeProvider>();
+
+    ProviderRegistry.register(
+      'AuthProvider',
+      () => {
+        'isLoggedIn': auth.isLoggedIn,
+        'isLoading': auth.isLoading,
+        'role': auth.currentUserRole.name,
+        'selectedRole': auth.selectedRole,
+        'error': auth.errorMessage,
+      },
+    );
+
+    ProviderRegistry.register(
+      'CartProvider',
+      () => {
+        'itemCount': cart.itemCount,
+        'subtotal': cart.subtotal,
+        'total': cart.total,
+        'deliveryFee': cart.deliveryFee,
+        'deliveryMethod': cart.deliveryMethod.name,
+        'isLoading': cart.isLoading,
+      },
+    );
+
+    ProviderRegistry.register(
+      'ThemeProvider',
+      () => {
+        'themeMode': theme.themeMode.name,
+      },
     );
   }
 
