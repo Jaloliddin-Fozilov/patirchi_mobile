@@ -30,4 +30,9 @@ class AppConstants {
   static const double elevationLow = 2.0;
   static const double elevationMed = 4.0;
   static const double elevationHigh = 8.0;
+
+  // Telegram bot
+  static const String telegramBotUsername = 'patirchibot';
+  static const Duration tgLoginPollInterval = Duration(seconds: 3);
+  static const Duration tgLoginPollTimeout = Duration(minutes: 5);
 }

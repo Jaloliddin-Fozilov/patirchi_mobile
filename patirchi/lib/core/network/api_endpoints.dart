@@ -24,6 +24,12 @@ class ApiEndpoints {
   /// GET — joriy foydalanuvchi profili.
   static const String me = '/auth/me/';
 
+  /// POST — Telegram bot orqali login sessiyasini boshlash.
+  static const String tgLoginStart = '/auth/tg-login/start/';
+
+  /// GET — Telegram bot login sessiyasi holatini tekshirish.
+  static const String tgLoginStatus = '/auth/tg-login/status/';
+
   /// POST — yangi hisob yaratish.
   static const String signup = '/auth/signup/';
 

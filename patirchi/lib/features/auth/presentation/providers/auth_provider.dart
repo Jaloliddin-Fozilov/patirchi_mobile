@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:patirchi/core/constants/app_constants.dart';
 import 'package:patirchi/core/constants/enums.dart';
 import 'package:patirchi/core/error/result.dart';
+import 'package:patirchi/features/auth/data/models/tg_login_models.dart';
 import 'package:patirchi/features/auth/data/models/user_model.dart';
 import 'package:patirchi/features/auth/data/repositories/auth_repository.dart';
+import 'package:patirchi/features/auth/data/repositories/tg_auth_repository.dart';
 
 /// Autentifikatsiya holati va operatsiyalarini boshqaruvchi Provider.
 ///
@@ -18,6 +23,7 @@ class AuthProvider extends ChangeNotifier {
       : _repository = repository ?? AuthRepository();
 
   final AuthRepository _repository;
+  final TgAuthRepository _tgRepository = TgAuthRepository();
 
   // ---------------------------------------------------------------------------
   // Holat
@@ -32,6 +38,14 @@ class AuthProvider extends ChangeNotifier {
 
   String? _errorMessage;
 
+  // Telegram login holati
+  TgLoginStartResponse? _tgSession;
+  TgLoginStatusResponse? _tgStatus;
+  Timer? _tgPollTimer;
+  DateTime? _tgPollStartedAt;
+  String? _tgErrorMessage;
+  bool _tgPolling = false;
+
   // ---------------------------------------------------------------------------
   // Getter'lar
   // ---------------------------------------------------------------------------
@@ -45,6 +59,12 @@ class AuthProvider extends ChangeNotifier {
   String? get otpSecret => _otpSecret;
 
   String? get errorMessage => _errorMessage;
+
+  // Telegram login getter'lar
+  TgLoginStartResponse? get tgSession => _tgSession;
+  TgLoginStatusResponse? get tgStatus => _tgStatus;
+  bool get isTgPolling => _tgPolling;
+  String? get tgErrorMessage => _tgErrorMessage;
 
   /// Navigatsiya uchun UserRole enum qiymati.
   ///
@@ -265,6 +285,106 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+  // Telegram login
+  // ---------------------------------------------------------------------------
+
+  /// Telegram login sessiyasini boshlaydi.
+  ///
+  /// [phoneNumber] — `+998XXXXXXXXX` formatida.
+  /// Muvaffaqiyatli bo'lsa [TgLoginStartResponse] qaytaradi (deep link ichida).
+  Future<TgLoginStartResponse?> startTgLogin(String phoneNumber) async {
+    _tgErrorMessage = null;
+    _setLoading(true);
+
+    final result = await _tgRepository.start(phoneNumber, _selectedRole);
+
+    return result.fold(
+      onSuccess: (response) {
+        _tgSession = response;
+        _setLoading(false);
+        return response;
+      },
+      onError: (failure) {
+        _tgErrorMessage = failure.message;
+        _setLoading(false);
+        return null;
+      },
+    );
+  }
+
+  /// Polling boshlash — har [AppConstants.tgLoginPollInterval] da status tekshiradi.
+  ///
+  /// Confirmed bo'lsa [onConfirmed] callback chaqiriladi.
+  /// Timeout/expired/rejected bo'lsa [onFailed] chaqiriladi.
+  void startTgPolling({
+    required void Function(UserModel user) onConfirmed,
+    required void Function(String reason) onFailed,
+  }) {
+    if (_tgSession == null) return;
+    if (_tgPolling) return;
+
+    _tgPolling = true;
+    _tgPollStartedAt = DateTime.now();
+    notifyListeners();
+
+    _tgPollTimer = Timer.periodic(
+      AppConstants.tgLoginPollInterval,
+      (timer) async {
+        // Timeout tekshirish
+        final elapsed = DateTime.now().difference(_tgPollStartedAt!);
+        if (elapsed > AppConstants.tgLoginPollTimeout) {
+          timer.cancel();
+          _tgPolling = false;
+          notifyListeners();
+          onFailed('Vaqt tugadi. Iltimos, qayta urinib ko\'ring.');
+          return;
+        }
+
+        final result = await _tgRepository.pollStatus(_tgSession!.secret);
+
+        result.fold(
+          onSuccess: (status) async {
+            _tgStatus = status;
+            notifyListeners();
+
+            if (status.isConfirmed) {
+              timer.cancel();
+              _tgPolling = false;
+              final user = await _tgRepository.persistFromStatus(status);
+              if (user != null) {
+                _currentUser = user;
+                _tgSession = null;
+                notifyListeners();
+                onConfirmed(user);
+              } else {
+                onFailed('Foydalanuvchi ma\'lumotlari olinmadi.');
+              }
+            } else if (status.isFinished) {
+              timer.cancel();
+              _tgPolling = false;
+              notifyListeners();
+              onFailed(status.message ?? 'Tasdiqlash amalga oshmadi.');
+            }
+            return null;
+          },
+          onError: (_) {
+            // Tarmoq/vaqtinchalik xatolar — pollingni davom ettir
+            return null;
+          },
+        );
+      },
+    );
+  }
+
+  /// Telegram pollingni to'xtatadi.
+  void stopTgPolling() {
+    _tgPollTimer?.cancel();
+    _tgPollTimer = null;
+    _tgPolling = false;
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
   // Yordamchi metodlar
   // ---------------------------------------------------------------------------
 
@@ -280,5 +400,11 @@ class AuthProvider extends ChangeNotifier {
 
   void _clearError() {
     _errorMessage = null;
+  }
+
+  @override
+  void dispose() {
+    _tgPollTimer?.cancel();
+    super.dispose();
   }
 }

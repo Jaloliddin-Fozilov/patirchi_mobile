@@ -3,13 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:patirchi/core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/telegram_login_button.dart';
+import '../widgets/tg_login_waiting_card.dart';
 
 /// OTP tasdiqlash ekrani.
 ///
 /// 4 raqamli kod kiritish, 60 soniyalik countdown,
 /// "Qayta yuborish" va avtomatik submit.
+/// Telegram bot orqali alternativ kirish imkoniyati.
 class OtpScreen extends StatefulWidget {
   const OtpScreen({super.key, required this.phoneNumber});
 
@@ -34,6 +38,16 @@ class _OtpScreenState extends State<OtpScreen> {
 
   int _secondsLeft = _timerSeconds;
   Timer? _timer;
+  bool _tgLaunching = false;
+
+  // AuthProvider reference — dispose'da xavfsiz foydalanish uchun
+  late final AuthProvider _authRef;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _authRef = context.read<AuthProvider>();
+  }
 
   @override
   void initState() {
@@ -47,6 +61,7 @@ class _OtpScreenState extends State<OtpScreen> {
 
   @override
   void dispose() {
+    _authRef.stopTgPolling();
     _timer?.cancel();
     for (final c in _controllers) {
       c.dispose();
@@ -69,8 +84,7 @@ class _OtpScreenState extends State<OtpScreen> {
     });
   }
 
-  String get _currentOtp =>
-      _controllers.map((c) => c.text).join();
+  String get _currentOtp => _controllers.map((c) => c.text).join();
 
   bool get _isOtpComplete => _currentOtp.length == _otpLength;
 
@@ -85,7 +99,9 @@ class _OtpScreenState extends State<OtpScreen> {
     if (success) {
       Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
     } else {
-      _showSnackBar(auth.errorMessage ?? 'Noto\'g\'ri kod. Qayta urinib ko\'ring.');
+      _showSnackBar(
+        auth.errorMessage ?? 'Noto\'g\'ri kod. Qayta urinib ko\'ring.',
+      );
       _clearOtp();
     }
   }
@@ -165,6 +181,63 @@ class _OtpScreenState extends State<OtpScreen> {
     return phone;
   }
 
+  // ---------------------------------------------------------------------------
+  // Telegram login
+  // ---------------------------------------------------------------------------
+
+  Future<void> _onTelegramLogin() async {
+    setState(() => _tgLaunching = true);
+
+    final auth = context.read<AuthProvider>();
+    final session = await auth.startTgLogin(widget.phoneNumber);
+
+    if (!mounted) return;
+    setState(() => _tgLaunching = false);
+
+    if (session == null) {
+      _showSnackBar(
+        auth.tgErrorMessage ?? 'Telegram sessiyasini boshlashda xatolik',
+      );
+      return;
+    }
+
+    // Telegram deep link'ni ochish
+    final uri = Uri.tryParse(session.deepLink);
+    if (uri == null) {
+      _showSnackBar('Noto\'g\'ri Telegram havolasi.');
+      return;
+    }
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+    if (!mounted) return;
+
+    if (!ok) {
+      _showSnackBar('Telegram ilovasi topilmadi. Iltimos, o\'rnating.');
+      return;
+    }
+
+    // Polling boshlash
+    auth.startTgPolling(
+      onConfirmed: (user) {
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+      },
+      onFailed: (reason) {
+        if (!mounted) return;
+        _showSnackBar(reason);
+      },
+    );
+  }
+
+  void _onCancelTgPolling() {
+    context.read<AuthProvider>().stopTgPolling();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -193,143 +266,189 @@ class _OtpScreenState extends State<OtpScreen> {
                 ),
               ],
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.sms_outlined,
-                    size: 36,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Kodni kiriting',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Kod $_formattedPhone ga yuborildi',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                // OTP kiritish maydonlari
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_otpLength, (index) {
-                    return Container(
-                      width: 56,
-                      height: 64,
-                      margin: const EdgeInsets.symmetric(horizontal: 6),
-                      child: KeyboardListener(
-                        focusNode: FocusNode(),
-                        onKeyEvent: (event) => _onKeyEvent(index, event),
-                        child: TextField(
-                          controller: _controllers[index],
-                          focusNode: _focusNodes[index],
-                          textAlign: TextAlign.center,
-                          keyboardType: TextInputType.number,
-                          maxLength: index == 0 ? _otpLength : 1,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                          decoration: InputDecoration(
-                            counterText: '',
-                            filled: true,
-                            fillColor: AppColors.warmBgMedium,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: AppColors.primary,
-                                width: 2,
-                              ),
-                            ),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (value) => _onDigitChanged(index, value),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 32),
-                // Tasdiqlash tugmasi
-                Consumer<AuthProvider>(
-                  builder: (_, auth, __) => SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: (auth.isLoading || !_isOtpComplete)
-                          ? null
-                          : _onSubmit,
-                      child: auth.isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Tasdiqlash'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Qayta yuborish
-                AnimatedBuilder(
-                  animation: Listenable.merge(_controllers),
-                  builder: (_, __) => _secondsLeft > 0
-                      ? Text(
-                          'Qayta yuborish $_secondsLeft soniyadan so\'ng',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        )
-                      : Consumer<AuthProvider>(
-                          builder: (_, auth, __) => GestureDetector(
-                            onTap: auth.isLoading ? null : _onResend,
-                            child: Text(
-                              'Qayta yuborish',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: auth.isLoading
-                                    ? AppColors.textSecondary
-                                    : AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                ),
-              ],
+            child: Consumer<AuthProvider>(
+              builder: (_, auth, __) {
+                if (auth.isTgPolling) {
+                  return TgLoginWaitingCard(
+                    onCancel: _onCancelTgPolling,
+                  );
+                }
+                return _buildOtpContent(auth);
+              },
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOtpContent(AuthProvider auth) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.sms_outlined,
+            size: 36,
+            color: AppColors.primary,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Kodni kiriting',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Kod $_formattedPhone ga yuborildi',
+          style: const TextStyle(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 32),
+        // OTP kiritish maydonlari
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_otpLength, (index) {
+            return Container(
+              width: 56,
+              height: 64,
+              margin: const EdgeInsets.symmetric(horizontal: 6),
+              child: KeyboardListener(
+                focusNode: FocusNode(),
+                onKeyEvent: (event) => _onKeyEvent(index, event),
+                child: TextField(
+                  controller: _controllers[index],
+                  focusNode: _focusNodes[index],
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  maxLength: index == 0 ? _otpLength : 1,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    filled: true,
+                    fillColor: AppColors.warmBgMedium,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 2,
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (value) => _onDigitChanged(index, value),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 32),
+        // Tasdiqlash tugmasi
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: (auth.isLoading || !_isOtpComplete) ? null : _onSubmit,
+            child: auth.isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Tasdiqlash'),
+          ),
+        ),
+        const SizedBox(height: 20),
+        // Qayta yuborish
+        AnimatedBuilder(
+          animation: Listenable.merge(_controllers),
+          builder: (_, __) => _secondsLeft > 0
+              ? Text(
+                  'Qayta yuborish $_secondsLeft soniyadan so\'ng',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              : GestureDetector(
+                  onTap: auth.isLoading ? null : _onResend,
+                  child: Text(
+                    'Qayta yuborish',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: auth.isLoading
+                          ? AppColors.textSecondary
+                          : AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 28),
+        const _Divider(),
+        const SizedBox(height: 20),
+        TelegramLoginButton(
+          isLoading: _tgLaunching,
+          onPressed: _onTelegramLogin,
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "yoki" ajratgich
+// ---------------------------------------------------------------------------
+
+class _Divider extends StatelessWidget {
+  const _Divider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(height: 1, color: AppColors.divider),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'yoki',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Container(height: 1, color: AppColors.divider),
+        ),
+      ],
     );
   }
 }
