@@ -156,14 +156,18 @@ jobs:
 
       # ----------------------------------------------------------------------
       # Telegram delivery — debug APK
+      # 1) Avval admin chatga upload qilamiz va `file_id` ni olamiz.
+      # 2) Backend'ni chaqirib, file_id ni barcha userlarga broadcast qilamiz.
       # ----------------------------------------------------------------------
-      - name: Send debug APK to Telegram
+      - name: Send debug APK to Telegram + broadcast
         if: |
           (github.event_name == 'push' ||
           (github.event_name == 'workflow_dispatch' && inputs.send_telegram == true))
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_BUILD_CHAT_ID }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
           APK_PATH: ${{ steps.build_info.outputs.apk_path }}
           VERSION: ${{ steps.build_info.outputs.version }}
           APK_SIZE: ${{ steps.build_info.outputs.apk_size }}
@@ -186,13 +190,52 @@ jobs:
           📏 Size: $APK_SIZE
           💬 _${COMMIT_MSG}_"
 
-          curl -sS --fail -X POST \
+          # Step 1: Upload to admin chat, capture file_id
+          echo "📤 APK admin chat'ga yuklanmoqda..."
+          RESPONSE=$(curl -sS -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             -F chat_id="${CHAT_ID}" \
             -F document=@"${APK_PATH}" \
             -F caption="${CAPTION}" \
-            -F parse_mode="Markdown" \
-            > /dev/null && echo "✅ APK Telegram'ga yuborildi" || echo "::warning::Telegram'ga yuborish muvaffaqiyatsiz"
+            -F parse_mode="Markdown")
+
+          FILE_ID=$(echo "$RESPONSE" | jq -r '.result.document.file_id // empty')
+
+          if [ -z "$FILE_ID" ]; then
+            echo "::warning::file_id olinmadi, broadcast skip"
+            echo "Response: $RESPONSE" | head -c 500
+            exit 0
+          fi
+
+          echo "✅ Admin chatga yuborildi (file_id=${FILE_ID:0:30}...)"
+
+          # Step 2: Trigger backend broadcast (agar konfiguratsiya bo'lsa)
+          if [ -z "$BACKEND_URL" ] || [ -z "$INTERNAL_API_KEY" ]; then
+            echo "ℹ️  BACKEND_URL/INTERNAL_API_KEY o'rnatilmagan, broadcast skip"
+            exit 0
+          fi
+
+          echo "📡 Barcha userlarga broadcast trigger qilinmoqda..."
+          BROADCAST_RESPONSE=$(curl -sS -X POST \
+            "${BACKEND_URL%/}/api/v1/internal/broadcast-apk/" \
+            -H "X-API-Key: ${INTERNAL_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg fid "$FILE_ID" \
+              --arg cap "$CAPTION" \
+              --arg ver "$VERSION" \
+              --arg com "$SHORT_SHA" \
+              '{file_id:$fid, caption:$cap, version:$ver, commit:$com, build_type:"debug"}')")
+
+          echo "📊 Backend javobi: $BROADCAST_RESPONSE"
+          TASK_ID=$(echo "$BROADCAST_RESPONSE" | jq -r '.task_id // empty')
+          TOTAL=$(echo "$BROADCAST_RESPONSE" | jq -r '.total_subscribers // 0')
+
+          if [ -n "$TASK_ID" ]; then
+            echo "✅ Broadcast queued: task=$TASK_ID, subscribers=$TOTAL"
+          else
+            echo "::warning::Broadcast trigger muvaffaqiyatsiz"
+          fi
 
   # ==========================================================================
   # 3. Release build — tag yoki manual
@@ -294,12 +337,14 @@ jobs:
       # ----------------------------------------------------------------------
       # Telegram delivery — release APK'lar (har bir ABI)
       # ----------------------------------------------------------------------
-      - name: Send release APKs to Telegram
+      - name: Send release APKs to Telegram + broadcast
         if: |
           inputs.send_telegram != false
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_BUILD_CHAT_ID }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
           VERSION: ${{ steps.build_info.outputs.version }}
           SHORT_SHA: ${{ steps.build_info.outputs.short_sha }}
           BRANCH: ${{ github.ref_name }}
@@ -356,19 +401,91 @@ jobs:
               > /dev/null && echo "✅ $LABEL yuborildi" || echo "::warning::$LABEL yuborilmadi"
           }
 
-          send_file "$APK_ARM64" "ARM64 APK"
-          send_file "$APK_ARM32" "ARM32 APK"
-          send_file "$APK_X64" "x86_64 APK"
+          # Admin chatga yuborish + ARM64 file_id ni ushlab qolish (broadcast uchun)
+          ARM64_FILE_ID=""
+          send_file_capture() {
+            local FILE="$1"
+            local LABEL="$2"
+            if [ ! -f "$FILE" ]; then
+              echo "⚠️  $FILE topilmadi, skip"
+              return
+            fi
+            SIZE=$(du -h "$FILE" | cut -f1)
+            echo "📤 $LABEL ($SIZE) yuborilmoqda..."
+            RESP=$(curl -sS -X POST \
+              "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+              -F chat_id="${CHAT_ID}" \
+              -F document=@"${FILE}" \
+              -F caption="📱 *${LABEL}* — \`v${VERSION}\` (${SIZE})" \
+              -F parse_mode="Markdown")
+            local FID=$(echo "$RESP" | jq -r '.result.document.file_id // empty')
+            if [ -n "$FID" ]; then
+              echo "✅ $LABEL yuborildi"
+              # ARM64 — eng keng tarqalgan ABI, broadcast uchun ishlatamiz
+              if [ "$LABEL" = "ARM64 APK" ]; then
+                ARM64_FILE_ID="$FID"
+              fi
+            else
+              echo "::warning::$LABEL yuborilmadi"
+            fi
+          }
+
+          send_file_capture "$APK_ARM64" "ARM64 APK"
+          send_file_capture "$APK_ARM32" "ARM32 APK"
+          send_file_capture "$APK_X64" "x86_64 APK"
 
           # AAB faqat 50MB dan kichik bo'lsa yuboriladi
           AAB_BYTES=$(stat -c%s "$AAB_PATH" 2>/dev/null || stat -f%z "$AAB_PATH")
           if [ "$AAB_BYTES" -lt 52428800 ]; then
-            send_file "$AAB_PATH" "App Bundle (AAB)"
+            curl -sS -X POST \
+              "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+              -F chat_id="${CHAT_ID}" \
+              -F document=@"${AAB_PATH}" \
+              -F caption="📦 *App Bundle (AAB)* — \`v${VERSION}\` (${AAB_SIZE})" \
+              -F parse_mode="Markdown" > /dev/null && echo "✅ AAB yuborildi"
           else
             curl -sS -X POST \
               "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
               -d chat_id="${CHAT_ID}" \
               -d text="⚠️ AAB ($AAB_SIZE) Telegram cheklovidan oshdi (50MB). GitHub artifacts'dan yuklab oling." > /dev/null
+          fi
+
+          # ====== Broadcast — barcha userlarga ARM64 APK ======
+          if [ -z "${BACKEND_URL:-}" ] || [ -z "${INTERNAL_API_KEY:-}" ]; then
+            echo "ℹ️  BACKEND_URL/INTERNAL_API_KEY yo'q, broadcast skip"
+            exit 0
+          fi
+
+          if [ -z "$ARM64_FILE_ID" ]; then
+            echo "::warning::ARM64 file_id yo'q, broadcast skip"
+            exit 0
+          fi
+
+          BCAST_CAPTION="🚀 *Patirchi Yangi Versiya!*
+          📦 Version: \`$VERSION\`
+          🔖 Build: \`$SHORT_SHA\`
+
+          Yuklab oling va o'rnating 👇"
+
+          echo "📡 Barcha userlarga broadcast..."
+          RESP=$(curl -sS -X POST \
+            "${BACKEND_URL%/}/api/v1/internal/broadcast-apk/" \
+            -H "X-API-Key: ${INTERNAL_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg fid "$ARM64_FILE_ID" \
+              --arg cap "$BCAST_CAPTION" \
+              --arg ver "$VERSION" \
+              --arg com "$SHORT_SHA" \
+              '{file_id:$fid, caption:$cap, version:$ver, commit:$com, build_type:"release"}')")
+
+          TASK_ID=$(echo "$RESP" | jq -r '.task_id // empty')
+          TOTAL=$(echo "$RESP" | jq -r '.total_subscribers // 0')
+
+          if [ -n "$TASK_ID" ]; then
+            echo "✅ Release broadcast queued: task=$TASK_ID, subscribers=$TOTAL"
+          else
+            echo "::warning::Broadcast trigger muvaffaqiyatsiz: $RESP"
           fi
 
       # ----- Tozalash (sensitive ma'lumotlar) — har doim, hatto fail bo'lsa ham -----
