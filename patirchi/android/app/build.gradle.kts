@@ -1,9 +1,29 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// ----------------------------------------------------------------------------
+// Release signing — `android/key.properties` faylidan o'qiladi.
+// CI muhitida fayl runtime'da yaratiladi (GitHub Secrets'dan).
+// Lokal development uchun fayl mavjud bo'lmasa, debug keystore ishlatiladi.
+// ----------------------------------------------------------------------------
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) {
+        load(FileInputStream(file))
+    }
+}
+
+val hasReleaseSigning = keystoreProperties.containsKey("storeFile") &&
+        keystoreProperties.containsKey("storePassword") &&
+        keystoreProperties.containsKey("keyAlias") &&
+        keystoreProperties.containsKey("keyPassword")
 
 android {
     namespace = "com.patirchi.patirchi"
@@ -27,11 +47,32 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                // Lokal `flutter run --release` ishlashi uchun fallback
+                signingConfigs.getByName("debug")
+            }
+            // Code obfuscation va resource shrinking — release size kamaytiradi
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

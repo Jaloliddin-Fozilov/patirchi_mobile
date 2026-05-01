@@ -1,0 +1,23 @@
+# Android signing config — release build uchun
+#
+# Bu faylni `key.properties` deb nusxalang va o'z qiymatlaringizni kiriting.
+# `key.properties` git'ga qo'shilmaydi (.gitignore'da).
+#
+# Keystore yaratish:
+#   keytool -genkey -v -keystore upload-keystore.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# CI uchun — GitHub Secrets'ga quyidagilarni qo'shing:
+#   ANDROID_KEYSTORE_BASE64    (base64-encoded jks fayl)
+#   ANDROID_KEYSTORE_PASSWORD  (storePassword)
+#   ANDROID_KEY_PASSWORD       (keyPassword)
+#   ANDROID_KEY_ALIAS          (keyAlias)
+#
+# Base64 encode keystore (macOS/Linux):
+#   base64 -i upload-keystore.jks -o keystore.base64.txt
+#   pbcopy < keystore.base64.txt   # → GitHub Secret'ga paste
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=upload-keystore.jks
