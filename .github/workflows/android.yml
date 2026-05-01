@@ -1,10 +1,15 @@
 name: Android Build
 
-# Workflow ishga tushish hodisalari:
-#   • push — barcha branch'larga, debug APK yiqiladi
-#   • pull_request — main/master ga, analyze + debug build
-#   • workflow_dispatch — qo'lda ishga tushirish (release uchun)
-#   • tag (v*.*.*) — release APK + AAB build qilinadi
+# ============================================================================
+# Trigger sharhlari:
+#   • push     — branch'larga, debug APK
+#   • PR       — security uchun GitHub-hosted runner (self-hosted emas)
+#   • dispatch — qo'lda ishga tushirish (debug yoki release)
+#   • tag      — release APK + AAB + GitHub Release ga ilova
+#
+# Build server: o'z self-hosted runnerimizda (label: patirchi-builder)
+# APK/AAB: build tugagach Telegram bot orqali yuboriladi
+# ============================================================================
 on:
   push:
     branches:
@@ -36,6 +41,11 @@ on:
         options:
           - debug
           - release
+      send_telegram:
+        description: "Telegram'ga yuborilsinmi?"
+        required: false
+        default: true
+        type: boolean
 
 # Bir vaqtda bitta workflow run; yangi push eski runni bekor qiladi
 concurrency:
@@ -43,43 +53,45 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  WORKING_DIR: patirchi
+  # Self-hosted runner'da Flutter + Java pre-installed bo'ladi (PATH'da)
+  # GitHub-hosted (PR uchun) — subosito/flutter-action avtomatik o'rnatadi
   FLUTTER_VERSION: "3.27.1"
   JAVA_VERSION: "17"
-  WORKING_DIR: patirchi
 
 jobs:
   # ==========================================================================
-  # 1. Static analysis + tests (har push/PR'da)
+  # 1. Static analysis + tests
+  # PR'lar uchun GitHub-hosted (security), boshqalar uchun self-hosted
   # ==========================================================================
   analyze:
     name: Analyze + Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "linux", "patirchi-builder"]') }}
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java (GitHub-hosted only)
+        if: github.event_name == 'pull_request'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Setup Flutter
+      - name: Setup Flutter (GitHub-hosted only)
+        if: github.event_name == 'pull_request'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      - name: Cache pub dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.pub-cache
-            ${{ env.WORKING_DIR }}/.dart_tool
-          key: pub-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: pub-${{ runner.os }}-
+      - name: Verify Flutter (self-hosted)
+        if: github.event_name != 'pull_request'
+        run: |
+          flutter --version
+          java -version
 
       - name: Flutter pub get
         working-directory: ${{ env.WORKING_DIR }}
@@ -88,7 +100,7 @@ jobs:
       - name: Verify formatting
         working-directory: ${{ env.WORKING_DIR }}
         run: dart format --output=none --set-exit-if-changed .
-        continue-on-error: true # warning only — formatlash CI ni bloklamasin
+        continue-on-error: true
 
       - name: Static analysis
         working-directory: ${{ env.WORKING_DIR }}
@@ -97,45 +109,22 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.WORKING_DIR }}
         run: flutter test --reporter expanded
-        continue-on-error: true # tests hali yo'q — fail qilmasin
+        continue-on-error: true
 
   # ==========================================================================
-  # 2. Debug APK (har push/PR'da)
+  # 2. Debug APK — har push, self-hosted server'da
   # ==========================================================================
   build-debug:
     name: Build Debug APK
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, patirchi-builder]
     needs: analyze
     timeout-minutes: 25
     if: |
       github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && inputs.build_type == 'debug')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
 
       - name: Flutter pub get
         working-directory: ${{ env.WORKING_DIR }}
@@ -145,51 +134,80 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: flutter build apk --debug
 
-      - name: Upload debug APK
+      - name: Get build info
+        id: build_info
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+          VERSION=$(grep -E '^version:' pubspec.yaml | sed 's/version: //')
+          echo "apk_path=${{ env.WORKING_DIR }}/$APK_PATH" >> $GITHUB_OUTPUT
+          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "short_sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Upload debug APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: patirchi-debug-${{ github.sha }}
-          path: ${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/app-debug.apk
+          path: ${{ steps.build_info.outputs.apk_path }}
           retention-days: 14
-          compression-level: 0 # APK allaqachon siqilgan
+          compression-level: 0
+
+      # ----------------------------------------------------------------------
+      # Telegram delivery — debug APK
+      # ----------------------------------------------------------------------
+      - name: Send debug APK to Telegram
+        if: |
+          (github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.send_telegram == true))
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_BUILD_CHAT_ID }}
+          APK_PATH: ${{ steps.build_info.outputs.apk_path }}
+          VERSION: ${{ steps.build_info.outputs.version }}
+          APK_SIZE: ${{ steps.build_info.outputs.apk_size }}
+          SHORT_SHA: ${{ steps.build_info.outputs.short_sha }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN yoki TELEGRAM_BUILD_CHAT_ID o'rnatilmagan, skip qilinadi"
+            exit 0
+          fi
+
+          COMMIT_MSG=$(git log -1 --pretty=%s | head -c 200)
+
+          CAPTION="🔨 *Patirchi Debug Build*
+          📦 Version: \`$VERSION\`
+          🌿 Branch: \`$BRANCH\`
+          🔖 Commit: \`$SHORT_SHA\`
+          👤 By: $ACTOR
+          📏 Size: $APK_SIZE
+          💬 _${COMMIT_MSG}_"
+
+          curl -sS --fail -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F chat_id="${CHAT_ID}" \
+            -F document=@"${APK_PATH}" \
+            -F caption="${CAPTION}" \
+            -F parse_mode="Markdown" \
+            > /dev/null && echo "✅ APK Telegram'ga yuborildi" || echo "::warning::Telegram'ga yuborish muvaffaqiyatsiz"
 
   # ==========================================================================
-  # 3. Release build (tag yoki manual)
+  # 3. Release build — tag yoki manual
   # ==========================================================================
   build-release:
     name: Build Release (APK + AAB)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, patirchi-builder]
     needs: analyze
     timeout-minutes: 30
     if: |
       startsWith(github.ref, 'refs/tags/v') ||
       (github.event_name == 'workflow_dispatch' && inputs.build_type == 'release')
-    environment: production # GitHub environment protection (optional)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
 
       - name: Flutter pub get
         working-directory: ${{ env.WORKING_DIR }}
@@ -229,12 +247,20 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: flutter build appbundle --release
 
-      # ----- Tozalash (sensitive ma'lumotlar) -----
-      - name: Cleanup secrets
-        if: always()
+      - name: Get build info
+        id: build_info
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
-          rm -f ${{ env.WORKING_DIR }}/android/app/upload-keystore.jks
-          rm -f ${{ env.WORKING_DIR }}/android/key.properties
+          VERSION=$(grep -E '^version:' pubspec.yaml | sed 's/version: //')
+          AAB_SIZE=$(du -h build/app/outputs/bundle/release/app-release.aab | cut -f1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "aab_size=$AAB_SIZE" >> $GITHUB_OUTPUT
+          echo "short_sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+          # ABI APK ro'yxati
+          echo "apk_arm32=${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" >> $GITHUB_OUTPUT
+          echo "apk_arm64=${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" >> $GITHUB_OUTPUT
+          echo "apk_x64=${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/app-x86_64-release.apk" >> $GITHUB_OUTPUT
+          echo "aab_path=${{ env.WORKING_DIR }}/build/app/outputs/bundle/release/app-release.aab" >> $GITHUB_OUTPUT
 
       # ----- Artifact'larni yuklash -----
       - name: Upload release APKs
@@ -264,3 +290,93 @@ jobs:
             ${{ env.WORKING_DIR }}/build/app/outputs/bundle/release/app-release.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ----------------------------------------------------------------------
+      # Telegram delivery — release APK'lar (har bir ABI)
+      # ----------------------------------------------------------------------
+      - name: Send release APKs to Telegram
+        if: |
+          inputs.send_telegram != false
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_BUILD_CHAT_ID }}
+          VERSION: ${{ steps.build_info.outputs.version }}
+          SHORT_SHA: ${{ steps.build_info.outputs.short_sha }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          APK_ARM64: ${{ steps.build_info.outputs.apk_arm64 }}
+          APK_ARM32: ${{ steps.build_info.outputs.apk_arm32 }}
+          APK_X64: ${{ steps.build_info.outputs.apk_x64 }}
+          AAB_PATH: ${{ steps.build_info.outputs.aab_path }}
+          AAB_SIZE: ${{ steps.build_info.outputs.aab_size }}
+        run: |
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "::warning::Telegram secrets yo'q, skip"
+            exit 0
+          fi
+
+          COMMIT_MSG=$(git log -1 --pretty=%s | head -c 200)
+
+          # Header xabar
+          HEADER="🚀 *Patirchi Release Build*
+          📦 Version: \`$VERSION\`
+          🌿 Branch: \`$BRANCH\`
+          🔖 Commit: \`$SHORT_SHA\`
+          👤 By: $ACTOR
+          💬 _${COMMIT_MSG}_
+
+          📦 Yuborilayotgan fayllar:
+          • ARM64 APK (zamonaviy qurilmalar)
+          • ARM32 APK (eski qurilmalar)
+          • x86_64 APK (emulyator)
+          • AAB ($AAB_SIZE — Play Store uchun)"
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="${HEADER}" \
+            -d parse_mode="Markdown" > /dev/null
+
+          # Har bir APK alohida yuboriladi (chunki Telegram bot 50MB cheklov)
+          send_file() {
+            local FILE="$1"
+            local LABEL="$2"
+            if [ ! -f "$FILE" ]; then
+              echo "⚠️  $FILE topilmadi, skip"
+              return
+            fi
+            SIZE=$(du -h "$FILE" | cut -f1)
+            echo "📤 $LABEL ($SIZE) yuborilmoqda..."
+            curl -sS --fail -X POST \
+              "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+              -F chat_id="${CHAT_ID}" \
+              -F document=@"${FILE}" \
+              -F caption="📱 *${LABEL}* — \`v${VERSION}\` (${SIZE})" \
+              -F parse_mode="Markdown" \
+              > /dev/null && echo "✅ $LABEL yuborildi" || echo "::warning::$LABEL yuborilmadi"
+          }
+
+          send_file "$APK_ARM64" "ARM64 APK"
+          send_file "$APK_ARM32" "ARM32 APK"
+          send_file "$APK_X64" "x86_64 APK"
+
+          # AAB faqat 50MB dan kichik bo'lsa yuboriladi
+          AAB_BYTES=$(stat -c%s "$AAB_PATH" 2>/dev/null || stat -f%z "$AAB_PATH")
+          if [ "$AAB_BYTES" -lt 52428800 ]; then
+            send_file "$AAB_PATH" "App Bundle (AAB)"
+          else
+            curl -sS -X POST \
+              "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="⚠️ AAB ($AAB_SIZE) Telegram cheklovidan oshdi (50MB). GitHub artifacts'dan yuklab oling." > /dev/null
+          fi
+
+      # ----- Tozalash (sensitive ma'lumotlar) — har doim, hatto fail bo'lsa ham -----
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          rm -f ${{ env.WORKING_DIR }}/android/app/upload-keystore.jks
+          rm -f ${{ env.WORKING_DIR }}/android/key.properties
+          # Build artefact'larni ham tozalash (disk space)
+          rm -rf ${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/*.apk || true
+          rm -rf ${{ env.WORKING_DIR }}/build/app/outputs/bundle/release/*.aab || true

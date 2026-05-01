@@ -2,6 +2,10 @@
 
 Patirchi mobile ilovasi uchun GitHub Actions orqali avtomatik build pipeline.
 
+> **🔥 Yangi:** Build endi **bizning serverimizda** (self-hosted runner) ishlaydi
+> va APK avtomatik **Telegram bot** orqali yuboriladi. To'liq setup uchun
+> [SELF_HOSTED_RUNNER.md](SELF_HOSTED_RUNNER.md) ni o'qing.
+
 ## 📦 Workflow nima qiladi?
 
 `.github/workflows/android.yml` — uchta job:
