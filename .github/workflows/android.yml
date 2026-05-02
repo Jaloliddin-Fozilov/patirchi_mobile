@@ -130,9 +130,45 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: flutter pub get
 
-      - name: Build debug APK (split per ABI — Telegram 50MB limit uchun)
+      # ----------------------------------------------------------------------
+      # Keystore decode (agar secrets mavjud bo'lsa)
+      # Agar secrets yo'q — build.gradle.kts debug keystore'ga fallback qiladi.
+      # ----------------------------------------------------------------------
+      - name: Setup signing (best-effort)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ℹ️  ANDROID_KEYSTORE_BASE64 yo'q — debug keystore ishlatiladi"
+            exit 0
+          fi
+          mkdir -p ${{ env.WORKING_DIR }}/android/app
+          echo "$KEYSTORE_BASE64" | base64 --decode \
+            > ${{ env.WORKING_DIR }}/android/app/upload-keystore.jks
+          cat > ${{ env.WORKING_DIR }}/android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+          echo "✅ Production keystore o'rnatildi"
+
+      # ----------------------------------------------------------------------
+      # Distribution APK — release mode (~25 MB ARM64)
+      # Debug mode 100+ MB → Telegram limit'idan oshib ketadi.
+      # Release: AOT compile + strip + ProGuard.
+      # ----------------------------------------------------------------------
+      - name: Build distribution APK (release + split per ABI)
         working-directory: ${{ env.WORKING_DIR }}
-        run: flutter build apk --debug --no-tree-shake-icons --no-pub --split-per-abi
+        run: |
+          flutter build apk \
+            --release \
+            --split-per-abi \
+            --no-tree-shake-icons \
+            --no-pub
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=true -Dorg.gradle.parallel=true"
 
@@ -140,12 +176,11 @@ jobs:
         id: build_info
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          # Split-per-abi rejimda ARM64 APK (eng keng tarqalgan, kichikroq)
-          # Telegram'ga yuboriladi. ARM32/x64 ham artifact'da saqlanadi.
-          APK_PATH="build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk"
+          # ARM64 APK Telegram'ga yuboriladi (eng keng tarqalgan zamonaviy ABI)
+          APK_PATH="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           if [ ! -f "$APK_PATH" ]; then
-            # Fallback: split bo'lmagan oddiy build (eski versiyalarga moslik)
-            APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+            # Fallback: agar split ishlamagan bo'lsa
+            APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
           fi
           APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
           VERSION=$(grep -E '^version:' pubspec.yaml | sed 's/version: //')
@@ -154,13 +189,22 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "short_sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
-      - name: Upload debug APKs as artifact
+      - name: Upload release APKs as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: patirchi-debug-${{ github.sha }}
-          path: ${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/app-*-debug.apk
+          name: patirchi-build-${{ github.sha }}
+          path: ${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/app-*-release.apk
           retention-days: 14
           compression-level: 0
+
+      # ----------------------------------------------------------------------
+      # Cleanup keystore — har holda (security)
+      # ----------------------------------------------------------------------
+      - name: Cleanup keystore
+        if: always()
+        run: |
+          rm -f ${{ env.WORKING_DIR }}/android/app/upload-keystore.jks
+          rm -f ${{ env.WORKING_DIR }}/android/key.properties
 
       # ----------------------------------------------------------------------
       # Telegram delivery — debug APK
@@ -190,7 +234,7 @@ jobs:
 
           COMMIT_MSG=$(git log -1 --pretty=%s | head -c 200)
 
-          CAPTION="🔨 *Patirchi Debug Build*
+          CAPTION="📱 *Patirchi APK*
           📦 Version: \`$VERSION\`
           🌿 Branch: \`$BRANCH\`
           🔖 Commit: \`$SHORT_SHA\`
