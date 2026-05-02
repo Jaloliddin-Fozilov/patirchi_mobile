@@ -62,7 +62,6 @@ class _SupplierProductFormScreenState
     if (!_formKey.currentState!.validate()) return;
 
     final provider = context.read<SupplierProductsProvider>();
-    final now = DateTime.now().millisecondsSinceEpoch.toString();
 
     final product = SupplierProductModel(
       id: widget.product?.id ?? 0,
@@ -253,7 +252,7 @@ class _SupplierProductFormScreenState
                   Expanded(
                     child: _buildField(
                       controller: _stockCtrl,
-                      label: 'Zaxira (${_selectedUnit})',
+                      label: 'Zaxira ($_selectedUnit)',
                       hint: '500',
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],

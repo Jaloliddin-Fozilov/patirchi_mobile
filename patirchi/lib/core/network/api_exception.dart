@@ -42,7 +42,6 @@ class ApiException implements Exception {
     return ApiException(
       message: parsed.message,
       statusCode: statusCode,
-      errorCode: parsed.errorCode,
       fieldErrors: parsed.fieldErrors,
     );
   }
@@ -120,37 +119,6 @@ class ApiException implements Exception {
     return _ParsedError(message: '');
   }
 
-  // ---------------------------------------------------------------------------
-  // Yordamchi metodlar
-  // ---------------------------------------------------------------------------
-
-  static String _messageForStatus(int statusCode) {
-    switch (statusCode) {
-      case 400:
-        return 'So\'rov noto\'g\'ri. Ma\'lumotlarni tekshiring.';
-      case 401:
-        return 'Tizimga kirish talab qilinadi. Iltimos, qayta kiring.';
-      case 403:
-        return 'Bu amalga ruxsat yo\'q.';
-      case 404:
-        return 'Soʻralgan ma\'lumot topilmadi.';
-      case 409:
-        return 'Ma\'lumot allaqachon mavjud.';
-      case 422:
-        return 'Ma\'lumotlar noto\'g\'ri formatda.';
-      case 429:
-        return 'Juda ko\'p so\'rov yuborildi. Biroz kutib turing.';
-      case 500:
-        return 'Server xatosi. Iltimos, keyinroq urinib ko\'ring.';
-      case 502:
-        return 'Server javob bermayapti. Keyinroq urinib ko\'ring.';
-      case 503:
-        return 'Xizmat vaqtincha mavjud emas. Keyinroq urinib ko\'ring.';
-      default:
-        return 'Xato yuz berdi (kod: $statusCode).';
-    }
-  }
-
   /// Birinchi maydon xatosini qaytaradi (forma validatsiyasi uchun).
   String? fieldError(String fieldName) => fieldErrors?[fieldName]?.first;
 
@@ -163,12 +131,10 @@ class ApiException implements Exception {
 class _ParsedError {
   const _ParsedError({
     required String message,
-    this.errorCode,
     this.fieldErrors,
   }) : _message = message;
 
   final String _message;
-  final String? errorCode;
   final Map<String, List<String>>? fieldErrors;
 
   String get message =>

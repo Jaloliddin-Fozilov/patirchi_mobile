@@ -37,15 +37,12 @@ abstract interface class ApiObserver {
 class ApiObserverRegistry {
   ApiObserverRegistry._();
 
-  static ApiObserver? _observer;
-
-  static set observer(ApiObserver? o) => _observer = o;
-  static ApiObserver? get observer => _observer;
+  static ApiObserver? observer;
 
   /// So'rov boshlanganda chaqiriladi.
   static void emitStart(NetworkLogEntry entry) {
     try {
-      _observer?.onRequestStart(entry);
+      observer?.onRequestStart(entry);
     } catch (_) {
       // Observer hech qachon API flow ni buzmasin
     }
@@ -59,7 +56,7 @@ class ApiObserverRegistry {
     Duration? duration,
   }) {
     try {
-      _observer?.onRequestComplete(
+      observer?.onRequestComplete(
         entryId,
         statusCode: statusCode,
         responseBody: responseBody,
@@ -76,7 +73,7 @@ class ApiObserverRegistry {
     Duration? duration,
   }) {
     try {
-      _observer?.onRequestError(
+      observer?.onRequestError(
         entryId,
         error: error,
         statusCode: statusCode,

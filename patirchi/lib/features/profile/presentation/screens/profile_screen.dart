@@ -375,7 +375,7 @@ class ProfileScreen extends StatelessWidget {
                         children: [
                           ProfileInfoTile(
                             icon: Icons.phone_outlined,
-                            text: user?.phone ?? '+998951112233',
+                            text: user?.phoneNumber ?? '+998951112233',
                             textColor: textColor,
                             iconColor: secondaryText,
                           ),

@@ -29,7 +29,8 @@ class BakeryRepository extends BaseRepository {
         ApiEndpoints.myStores,
         queryParams: {'menu': 'bakery'},
       );
-      final results = response['results'] as List? ?? (response is List ? response : [response]);
+      final results = (response['results'] as List?) ??
+          (response is List ? response as List : <dynamic>[response]);
       return results
           .whereType<Map<String, dynamic>>()
           .map(StoreInfo.fromJson)
@@ -137,7 +138,8 @@ class BakeryRepository extends BaseRepository {
   Future<Result<List<ProductCategory>>> getCategories() {
     return safeApiCall(() async {
       final response = await _api.get(ApiEndpoints.categories);
-      final results = response['results'] as List? ?? (response is List ? response : []);
+      final results = (response['results'] as List?) ??
+          (response is List ? response as List : <dynamic>[]);
       return results
           .whereType<Map<String, dynamic>>()
           .map(ProductCategory.fromJson)

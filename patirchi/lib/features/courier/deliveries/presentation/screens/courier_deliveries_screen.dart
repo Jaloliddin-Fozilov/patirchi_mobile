@@ -204,7 +204,7 @@ class _OnlineToggle extends StatelessWidget {
           Switch(
             value: isOnline,
             onChanged: (_) => onToggle(),
-            activeThumbColor: Colors.white,
+            activeColor: Colors.white,
             activeTrackColor: Colors.white.withValues(alpha: 0.4),
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.white.withValues(alpha: 0.3),

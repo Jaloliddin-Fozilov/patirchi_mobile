@@ -25,7 +25,7 @@ sealed class Failure implements Exception {
 
   @override
   String toString() =>
-      '${runtimeType}(code: $code, message: $message)';
+      '$runtimeType(code: $code, message: $message)';
 }
 
 // ---------------------------------------------------------------------------

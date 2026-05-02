@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:patirchi/core/constants/enums.dart';
 import 'package:patirchi/core/network/api_client.dart';
 import 'package:patirchi/core/network/api_endpoints.dart';
-import 'package:patirchi/core/repositories/base_repository.dart';
 
 // ---------------------------------------------------------------------------
 // Model

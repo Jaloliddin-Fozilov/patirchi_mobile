@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:patirchi/core/error/result.dart';
 import 'package:patirchi/core/models/product_category_model.dart';
 import 'package:patirchi/features/bakery/data/repositories/bakery_repository.dart';
 import 'package:patirchi/features/bakery/menu/data/models/menu_item_model.dart';
@@ -168,7 +169,7 @@ class MenuProvider extends ChangeNotifier {
 
     final result = await _repo.createProduct(_storeId!, data);
     result.fold(
-      onSuccess: (item) => _items = [..._items, item],
+      onSuccess: (item) => _items = <MenuItemModel>[..._items, item],
       onError: (failure) => _error = failure.toUserMessage(),
     );
 
@@ -194,7 +195,7 @@ class MenuProvider extends ChangeNotifier {
     result.fold(
       onSuccess: (updated) {
         _items = _items
-            .map((item) => item.id == updated.id ? updated : item)
+            .map<MenuItemModel>((item) => item.id == updated.id ? updated : item)
             .toList();
       },
       onError: (failure) => _error = failure.toUserMessage(),

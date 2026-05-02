@@ -20,13 +20,8 @@ class ApiConfig {
   // Joriy URL
   // ---------------------------------------------------------------------------
 
-  String _baseUrl = 'https://app.patirchi.uz/api/v1';
-
   /// Joriy base URL.
-  String get baseUrl => _baseUrl;
-
-  /// Base URL ni o'zgartiradi.
-  set baseUrl(String url) => _baseUrl = url;
+  String baseUrl = 'https://app.patirchi.uz/api/v1';
 
   // ---------------------------------------------------------------------------
   // Preset detection
@@ -36,7 +31,7 @@ class ApiConfig {
   /// Hech biriga mos kelmasa — `'custom'`.
   String get currentPreset {
     for (final entry in presets.entries) {
-      if (entry.value == _baseUrl) return entry.key;
+      if (entry.value == baseUrl) return entry.key;
     }
     return 'custom';
   }
@@ -45,11 +40,11 @@ class ApiConfig {
   /// [presetName] `presets` da mavjud bo'lmasa — o'zgarmaydi.
   void applyPreset(String presetName) {
     final url = presets[presetName];
-    if (url != null) _baseUrl = url;
+    if (url != null) baseUrl = url;
   }
 
   /// Production URL ga qaytaradi.
   void resetToProduction() {
-    _baseUrl = presets['production']!;
+    baseUrl = presets['production']!;
   }
 }

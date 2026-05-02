@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:patirchi/core/error/result.dart';
 import 'package:patirchi/features/supplier/data/repositories/supplier_repository.dart';
 import 'package:patirchi/features/supplier/products/data/models/supplier_product_model.dart';
 
@@ -145,7 +146,7 @@ class SupplierProductsProvider extends ChangeNotifier {
 
     final result = await _repo.createProduct(_storeId!, data);
     result.fold(
-      onSuccess: (product) => _products = [..._products, product],
+      onSuccess: (product) => _products = <SupplierProductModel>[..._products, product],
       onError: (failure) => _error = failure.toUserMessage(),
     );
 
@@ -171,7 +172,7 @@ class SupplierProductsProvider extends ChangeNotifier {
     result.fold(
       onSuccess: (updated) {
         _products = _products
-            .map((p) => p.id == updated.id ? updated : p)
+            .map<SupplierProductModel>((p) => p.id == updated.id ? updated : p)
             .toList();
       },
       onError: (failure) => _error = failure.toUserMessage(),

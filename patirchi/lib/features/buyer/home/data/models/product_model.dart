@@ -116,7 +116,7 @@ class ProductModel {
     this.isFavorite = false,
   });
 
-  /// Full detail from GET /site/products/<id>/
+  /// Full detail from GET `/site/products/<id>/`
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     return ProductModel(
       id: (json['id'] as num).toInt(),

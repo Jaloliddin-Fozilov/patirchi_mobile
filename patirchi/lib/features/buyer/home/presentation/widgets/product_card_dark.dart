@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:patirchi/core/theme/app_colors.dart';
 import 'package:patirchi/core/utils/formatters.dart';
 import 'package:patirchi/features/buyer/home/data/models/product_model.dart';
 

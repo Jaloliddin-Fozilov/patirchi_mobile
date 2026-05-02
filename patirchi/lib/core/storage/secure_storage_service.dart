@@ -140,7 +140,7 @@ class SecureStorageService {
   Future<Map<String, String?>> getAllForDebug() async {
     return _store.map((key, value) {
       // Tokenlar va maxfiy kalitlarni qisman yashirish
-      if (key.contains('token') && value != null && value.length > 20) {
+      if (key.contains('token') && value.length > 20) {
         final masked =
             '${value.substring(0, 10)}...${value.substring(value.length - 10)}';
         return MapEntry(key, masked);

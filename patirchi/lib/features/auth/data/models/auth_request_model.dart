@@ -1,7 +1,7 @@
-/// Autentifikatsiya so'rovlari uchun model sinflari.
-///
-/// Barcha modellar snake_case kalitlari bilan `toJson()` qaytaradi
-/// (Django REST Framework standartiga mos).
+// Autentifikatsiya so'rovlari uchun model sinflari.
+//
+// Barcha modellar snake_case kalitlari bilan `toJson()` qaytaradi
+// (Django REST Framework standartiga mos).
 
 // ---------------------------------------------------------------------------
 // Login (OTP yuborish)
