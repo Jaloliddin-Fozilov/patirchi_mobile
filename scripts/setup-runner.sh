@@ -26,7 +26,7 @@
 
 set -euo pipefail
 
-readonly FLUTTER_VERSION="3.27.1"
+readonly FLUTTER_VERSION="3.32.0"
 readonly JAVA_VERSION="17"
 readonly ANDROID_CMDLINE_TOOLS_VERSION="11076708"
 readonly RUNNER_VERSION="2.321.0"
