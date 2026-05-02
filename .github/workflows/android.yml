@@ -207,17 +207,15 @@ jobs:
           rm -f ${{ env.WORKING_DIR }}/android/key.properties
 
       # ----------------------------------------------------------------------
-      # Telegram delivery — debug APK
-      # 1) Avval admin chatga upload qilamiz va `file_id` ni olamiz.
-      # 2) Backend'ni chaqirib, file_id ni barcha userlarga broadcast qilamiz.
+      # APK delivery — backend host + Telegram link broadcast
+      # 1) APK ni backend'ga upload qilamiz (POST /internal/upload-apk/)
+      # 2) Backend'ni chaqirib link bilan broadcast qilamiz
+      # 3) Foydalanuvchilar Telegram'da "⬇️ Yuklab olish" tugma bilan link oladilar
+      # 50MB cheklovi yo'q — backend o'zi APK'ni host qiladi.
       # ----------------------------------------------------------------------
-      - name: Send debug APK to Telegram + broadcast
-        # PR'larda yuborilmaydi (secrets exposed bo'lmasligi uchun);
-        # qolgan barcha trigger'lar (push, workflow_dispatch, tag) — yuboriladi
+      - name: Upload APK to backend + broadcast download link
         if: github.event_name != 'pull_request'
         env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_BUILD_CHAT_ID }}
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
           APK_PATH: ${{ steps.build_info.outputs.apk_path }}
@@ -227,72 +225,56 @@ jobs:
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
         run: |
-          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "::warning::TELEGRAM_BOT_TOKEN yoki TELEGRAM_BUILD_CHAT_ID o'rnatilmagan, skip qilinadi"
+          if [ -z "$BACKEND_URL" ] || [ -z "$INTERNAL_API_KEY" ]; then
+            echo "::warning::BACKEND_URL/INTERNAL_API_KEY o'rnatilmagan, skip"
             exit 0
           fi
 
+          echo "📤 APK backend'ga yuklanmoqda (${APK_SIZE})..."
+          UPLOAD_RESPONSE=$(curl -sS -X POST \
+            "${BACKEND_URL%/}/api/v1/internal/upload-apk/" \
+            -H "X-API-Key: ${INTERNAL_API_KEY}" \
+            -F "file=@${APK_PATH}" \
+            -F "version=${VERSION}" \
+            -F "commit=${SHORT_SHA}" \
+            -F "branch=${BRANCH}")
+
+          echo "📊 Upload javobi: $UPLOAD_RESPONSE"
+          DOWNLOAD_URL=$(echo "$UPLOAD_RESPONSE" | jq -r '.download_url // empty')
+
+          if [ -z "$DOWNLOAD_URL" ]; then
+            echo "::warning::download_url olinmadi, broadcast skip"
+            echo "Response: $UPLOAD_RESPONSE" | head -c 500
+            exit 1
+          fi
+          echo "✅ APK yuklandi: $DOWNLOAD_URL"
+
+          # Telegram broadcast — link bilan
           COMMIT_MSG=$(git log -1 --pretty=%s | head -c 200)
 
-          CAPTION="📱 *Patirchi APK*
-          📦 Version: \`$VERSION\`
+          CAPTION="🚀 *Patirchi yangi versiya!*
+          📦 Versiya: \`$VERSION\`
           🌿 Branch: \`$BRANCH\`
-          🔖 Commit: \`$SHORT_SHA\`
-          👤 By: $ACTOR
-          📏 Size: $APK_SIZE
-          💬 _${COMMIT_MSG}_"
+          🔖 Build: \`$SHORT_SHA\`
+          📏 Hajm: $APK_SIZE
+          👤 Tomonidan: $ACTOR
+          💬 _${COMMIT_MSG}_
 
-          # Telegram bot API limit: 50 MB
-          APK_BYTES=$(stat -c%s "$APK_PATH" 2>/dev/null || stat -f%z "$APK_PATH")
-          MAX_BYTES=$((50 * 1024 * 1024))
-          if [ "$APK_BYTES" -gt "$MAX_BYTES" ]; then
-            echo "::warning::APK ${APK_SIZE} > 50MB Telegram limit, skip yuborish"
-            echo "ℹ️  Foydalanuvchi GitHub artifacts'dan yuklab olishi mumkin"
-            curl -sS -X POST \
-              "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-              -d chat_id="${CHAT_ID}" \
-              -d text="⚠️ Patirchi Debug Build (v${VERSION} ${SHORT_SHA}): APK hajmi ${APK_SIZE}, Telegram cheklovidan oshdi. GitHub Artifacts'dan yuklab oling." > /dev/null
-            exit 0
-          fi
+          ⬇️ Pastdagi tugmani bosing 👇"
 
-          # Step 1: Upload to admin chat, capture file_id
-          echo "📤 APK admin chat'ga yuklanmoqda (${APK_SIZE})..."
-          RESPONSE=$(curl -sS -X POST \
-            "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-            -F chat_id="${CHAT_ID}" \
-            -F document=@"${APK_PATH}" \
-            -F caption="${CAPTION}" \
-            -F parse_mode="Markdown")
-
-          FILE_ID=$(echo "$RESPONSE" | jq -r '.result.document.file_id // empty')
-
-          if [ -z "$FILE_ID" ]; then
-            echo "::warning::file_id olinmadi, broadcast skip"
-            echo "Response: $RESPONSE" | head -c 500
-            exit 0
-          fi
-
-          echo "✅ Admin chatga yuborildi (file_id=${FILE_ID:0:30}...)"
-
-          # Step 2: Trigger backend broadcast (agar konfiguratsiya bo'lsa)
-          if [ -z "$BACKEND_URL" ] || [ -z "$INTERNAL_API_KEY" ]; then
-            echo "ℹ️  BACKEND_URL/INTERNAL_API_KEY o'rnatilmagan, broadcast skip"
-            exit 0
-          fi
-
-          echo "📡 Barcha userlarga broadcast trigger qilinmoqda..."
+          echo "📡 Barcha userlarga broadcast..."
           BROADCAST_RESPONSE=$(curl -sS -X POST \
             "${BACKEND_URL%/}/api/v1/internal/broadcast-apk/" \
             -H "X-API-Key: ${INTERNAL_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
-              --arg fid "$FILE_ID" \
+              --arg url "$DOWNLOAD_URL" \
               --arg cap "$CAPTION" \
               --arg ver "$VERSION" \
               --arg com "$SHORT_SHA" \
-              '{file_id:$fid, caption:$cap, version:$ver, commit:$com, build_type:"debug"}')")
+              '{download_url:$url, caption:$cap, version:$ver, commit:$com, build_type:"release"}')")
 
-          echo "📊 Backend javobi: $BROADCAST_RESPONSE"
+          echo "📊 Broadcast javobi: $BROADCAST_RESPONSE"
           TASK_ID=$(echo "$BROADCAST_RESPONSE" | jq -r '.task_id // empty')
           TOTAL=$(echo "$BROADCAST_RESPONSE" | jq -r '.total_subscribers // 0')
 
