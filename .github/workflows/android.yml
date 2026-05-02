@@ -130,18 +130,23 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: flutter pub get
 
-      - name: Build debug APK
+      - name: Build debug APK (split per ABI — Telegram 50MB limit uchun)
         working-directory: ${{ env.WORKING_DIR }}
-        run: flutter build apk --debug --no-tree-shake-icons --no-pub
+        run: flutter build apk --debug --no-tree-shake-icons --no-pub --split-per-abi
         env:
-          # Gradle daemon bilan keyingi build'larda 30-40% tezroq
           GRADLE_OPTS: "-Dorg.gradle.daemon=true -Dorg.gradle.parallel=true"
 
       - name: Get build info
         id: build_info
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          # Split-per-abi rejimda ARM64 APK (eng keng tarqalgan, kichikroq)
+          # Telegram'ga yuboriladi. ARM32/x64 ham artifact'da saqlanadi.
+          APK_PATH="build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            # Fallback: split bo'lmagan oddiy build (eski versiyalarga moslik)
+            APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          fi
           APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
           VERSION=$(grep -E '^version:' pubspec.yaml | sed 's/version: //')
           echo "apk_path=${{ env.WORKING_DIR }}/$APK_PATH" >> $GITHUB_OUTPUT
@@ -149,11 +154,11 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "short_sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
-      - name: Upload debug APK as artifact
+      - name: Upload debug APKs as artifact
         uses: actions/upload-artifact@v4
         with:
           name: patirchi-debug-${{ github.sha }}
-          path: ${{ steps.build_info.outputs.apk_path }}
+          path: ${{ env.WORKING_DIR }}/build/app/outputs/flutter-apk/app-*-debug.apk
           retention-days: 14
           compression-level: 0
 
@@ -193,8 +198,21 @@ jobs:
           📏 Size: $APK_SIZE
           💬 _${COMMIT_MSG}_"
 
+          # Telegram bot API limit: 50 MB
+          APK_BYTES=$(stat -c%s "$APK_PATH" 2>/dev/null || stat -f%z "$APK_PATH")
+          MAX_BYTES=$((50 * 1024 * 1024))
+          if [ "$APK_BYTES" -gt "$MAX_BYTES" ]; then
+            echo "::warning::APK ${APK_SIZE} > 50MB Telegram limit, skip yuborish"
+            echo "ℹ️  Foydalanuvchi GitHub artifacts'dan yuklab olishi mumkin"
+            curl -sS -X POST \
+              "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="⚠️ Patirchi Debug Build (v${VERSION} ${SHORT_SHA}): APK hajmi ${APK_SIZE}, Telegram cheklovidan oshdi. GitHub Artifacts'dan yuklab oling." > /dev/null
+            exit 0
+          fi
+
           # Step 1: Upload to admin chat, capture file_id
-          echo "📤 APK admin chat'ga yuklanmoqda..."
+          echo "📤 APK admin chat'ga yuklanmoqda (${APK_SIZE})..."
           RESPONSE=$(curl -sS -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             -F chat_id="${CHAT_ID}" \
