@@ -384,6 +384,53 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Manual status check — foydalanuvchi "Tekshirish" tugmasini bosganda.
+  ///
+  /// Polling timer'ini buzmaydi, faqat darhol bir marta tekshiradi.
+  /// Confirmed bo'lsa polling to'xtatiladi va [onConfirmed] chaqiriladi.
+  Future<void> checkTgStatusOnce({
+    required void Function(UserModel user) onConfirmed,
+    required void Function(String reason) onFailed,
+  }) async {
+    if (_tgSession == null) {
+      onFailed('Sessiya topilmadi.');
+      return;
+    }
+
+    final result = await _tgRepository.pollStatus(_tgSession!.secret);
+
+    await result.fold(
+      onSuccess: (status) async {
+        _tgStatus = status;
+        notifyListeners();
+
+        if (status.isConfirmed) {
+          _tgPollTimer?.cancel();
+          _tgPolling = false;
+          final user = await _tgRepository.persistFromStatus(status);
+          if (user != null) {
+            _currentUser = user;
+            _tgSession = null;
+            notifyListeners();
+            onConfirmed(user);
+          } else {
+            onFailed('Foydalanuvchi ma\'lumotlari olinmadi.');
+          }
+        } else if (status.isFinished) {
+          _tgPollTimer?.cancel();
+          _tgPolling = false;
+          notifyListeners();
+          onFailed(status.message ?? 'Tasdiqlash amalga oshmadi.');
+        }
+        return null;
+      },
+      onError: (failure) {
+        onFailed(failure.message);
+        return null;
+      },
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Yordamchi metodlar
   // ---------------------------------------------------------------------------

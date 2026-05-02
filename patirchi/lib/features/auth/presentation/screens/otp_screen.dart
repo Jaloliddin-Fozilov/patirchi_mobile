@@ -234,6 +234,25 @@ class _OtpScreenState extends State<OtpScreen> {
     context.read<AuthProvider>().stopTgPolling();
   }
 
+  /// "Hozir tekshirish" tugma — qo'lda status check qiladi.
+  /// Bot kontaktni tasdiqlagan bo'lishi mumkin, lekin polling sekinlashgan.
+  Future<void> _onCheckNow() async {
+    final auth = context.read<AuthProvider>();
+    await auth.checkTgStatusOnce(
+      onConfirmed: (user) {
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/home',
+          (_) => false,
+        );
+      },
+      onFailed: (reason) {
+        if (!mounted) return;
+        _showSnackBar(reason);
+      },
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Build
   // ---------------------------------------------------------------------------
@@ -271,6 +290,7 @@ class _OtpScreenState extends State<OtpScreen> {
                 if (auth.isTgPolling) {
                   return TgLoginWaitingCard(
                     onCancel: _onCancelTgPolling,
+                    onCheckNow: _onCheckNow,
                   );
                 }
                 return _buildOtpContent(auth);

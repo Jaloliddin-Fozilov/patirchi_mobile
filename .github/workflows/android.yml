@@ -163,9 +163,9 @@ jobs:
       # 2) Backend'ni chaqirib, file_id ni barcha userlarga broadcast qilamiz.
       # ----------------------------------------------------------------------
       - name: Send debug APK to Telegram + broadcast
-        if: |
-          (github.event_name == 'push' ||
-          (github.event_name == 'workflow_dispatch' && inputs.send_telegram == true))
+        # PR'larda yuborilmaydi (secrets exposed bo'lmasligi uchun);
+        # qolgan barcha trigger'lar (push, workflow_dispatch, tag) — yuboriladi
+        if: github.event_name != 'pull_request'
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_BUILD_CHAT_ID }}
@@ -341,8 +341,8 @@ jobs:
       # Telegram delivery — release APK'lar (har bir ABI)
       # ----------------------------------------------------------------------
       - name: Send release APKs to Telegram + broadcast
-        if: |
-          inputs.send_telegram != false
+        # PR'larda yuborilmaydi; tag/manual trigger'lar — yuboriladi
+        if: github.event_name != 'pull_request'
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_BUILD_CHAT_ID }}

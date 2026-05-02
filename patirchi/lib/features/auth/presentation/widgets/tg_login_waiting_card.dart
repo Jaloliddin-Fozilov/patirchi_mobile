@@ -3,15 +3,21 @@ import 'package:patirchi/core/theme/app_colors.dart';
 
 /// Telegram polling holatida ko'rsatiluvchi kutish kartasi.
 ///
-/// Pulsatsiyalanuvchi animatsiya, holat matni va bekor qilish tugmasi.
+/// Pulsatsiyalanuvchi animatsiya, holat matni, bekor qilish va
+/// "Tekshirish" tugmalari (agar polling ishlamasa user qo'lda check qila oladi).
 class TgLoginWaitingCard extends StatefulWidget {
   const TgLoginWaitingCard({
     super.key,
     required this.onCancel,
+    this.onCheckNow,
     this.statusMessage,
   });
 
   final VoidCallback onCancel;
+
+  /// "Hozir tekshirish" tugmasi — qo'lda status check uchun.
+  final VoidCallback? onCheckNow;
+
   final String? statusMessage;
 
   @override
@@ -106,7 +112,23 @@ class _TgLoginWaitingCardState extends State<TgLoginWaitingCard>
             color: _tgBlue,
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        if (widget.onCheckNow != null) ...[
+          OutlinedButton.icon(
+            onPressed: widget.onCheckNow,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Hozir tekshirish'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _tgBlue,
+              side: const BorderSide(color: _tgBlue),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 10,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         TextButton(
           onPressed: widget.onCancel,
           child: const Text('Bekor qilish'),
