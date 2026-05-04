@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:patirchi/core/constants/enums.dart';
 import 'package:patirchi/core/dev_mode/api_observer.dart';
 import 'package:patirchi/core/dev_mode/app_logger.dart';
+import 'package:patirchi/core/dev_mode/app_navigator_key.dart';
 import 'package:patirchi/core/dev_mode/dev_mode_service.dart';
 import 'package:patirchi/core/dev_mode/provider_registry.dart';
 import 'package:patirchi/core/dev_mode/stores/log_store.dart';
@@ -111,6 +112,8 @@ class PatirchiApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             initialRoute: '/',
             onGenerateRoute: _onGenerateRoute,
+            // Global navigator kalit — dev FAB modal'larini chaqirish uchun.
+            navigatorKey: appNavigatorKey,
             // Developer mode FAB overlay — barcha screen ustida
             builder: DevModeOverlay.wrap,
           );

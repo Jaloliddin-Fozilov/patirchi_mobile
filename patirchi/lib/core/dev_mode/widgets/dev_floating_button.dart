@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:patirchi/core/dev_mode/app_navigator_key.dart';
 import 'package:patirchi/core/dev_mode/widgets/dev_theme.dart';
 import 'package:patirchi/core/dev_mode/widgets/debugger_sheet.dart';
 
@@ -31,13 +31,38 @@ class DevFloatingButton extends StatelessWidget {
     );
   }
 
-  void _openDebugger(BuildContext context) {
+  void _openDebugger(BuildContext fallbackContext) {
     debugPrint('[DevFAB] Opening debugger...');
+
+    // MUHIM: `MaterialApp.builder` ABOVE Navigator deb chaqiriladi, shu sababli
+    // FAB build context'ida `Navigator.of(context)` ancestor topa olmaydi va
+    // release rejimda "Null check operator used on a null value" xatosi
+    // chiqaradi. Buning oldini olish uchun global [appNavigatorKey] orqali
+    // overlay context'ini olamiz — u Navigator BELOW da joylashgan.
+    final navigator = appNavigatorKey.currentState;
+    final overlayContext = navigator?.overlay?.context;
+
+    if (overlayContext == null) {
+      debugPrint('[DevFAB] ERROR: appNavigatorKey not attached');
+      if (fallbackContext.mounted) {
+        ScaffoldMessenger.of(fallbackContext).showSnackBar(
+          const SnackBar(
+            content: Text('Debugger tayyor emas (navigator topilmadi)'),
+            backgroundColor: DevTheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
     try {
       showModalBottomSheet<void>(
-        context: context,
+        context: overlayContext,
         isScrollControlled: true,
-        useRootNavigator: true,
+        // useRootNavigator: false — overlayContext allaqachon root Navigator
+        // ostidagi context'dir; true qilsak yana bir bor yuqoriga walk qiladi
+        // va xato qaytishi mumkin.
+        useRootNavigator: false,
         backgroundColor: DevTheme.bgPrimary,
         barrierColor: Colors.black54,
         shape: const RoundedRectangleBorder(
@@ -51,9 +76,8 @@ class DevFloatingButton extends StatelessWidget {
     } on Object catch (e, stack) {
       debugPrint('[DevFAB] ERROR opening debugger: $e');
       debugPrintStack(stackTrace: stack, label: 'DevFAB');
-      // Foydalanuvchiga ham ko'rsatamiz
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (fallbackContext.mounted) {
+        ScaffoldMessenger.of(fallbackContext).showSnackBar(
           SnackBar(
             content: Text('Debugger ochilmadi: $e'),
             backgroundColor: DevTheme.error,
